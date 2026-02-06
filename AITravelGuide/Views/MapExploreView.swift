@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 struct MapExploreView: View {
     @StateObject private var viewModel = ExploreViewModel()

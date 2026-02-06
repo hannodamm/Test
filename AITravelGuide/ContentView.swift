@@ -34,6 +34,9 @@ struct ContentView: View {
                 .tag(Tab.chat)
         }
         .tint(.accentColor)
+        .onAppear {
+            locationManager.requestPermission()
+        }
         .overlay {
             if locationManager.authorizationStatus == .notDetermined {
                 locationPermissionOverlay

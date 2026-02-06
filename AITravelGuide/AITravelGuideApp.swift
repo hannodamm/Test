@@ -10,9 +10,6 @@ struct AITravelGuideApp: App {
             ContentView()
                 .environmentObject(locationManager)
                 .environmentObject(tourViewModel)
-                .onAppear {
-                    locationManager.requestPermission()
-                }
         }
     }
 }

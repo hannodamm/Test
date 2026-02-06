@@ -250,9 +250,8 @@ struct TourView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            if let distance = tourViewModel.distanceToCurrentStop(
-                                from: locationManager.currentLocation ?? CLLocation()
-                            ) {
+                            if let location = locationManager.currentLocation,
+                               let distance = tourViewModel.distanceToCurrentStop(from: location) {
                                 Text(distance)
                                     .font(.caption.bold())
                                     .foregroundStyle(.blue)
