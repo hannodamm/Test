@@ -7,6 +7,7 @@ struct TourView: View {
 
     @State private var showStopSheet = false
     @State private var showStopChat = false
+    @State private var showGuideChat = false
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
 
     var body: some View {
@@ -294,17 +295,30 @@ struct TourView: View {
                             .background(Color.yellow.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                         }
 
-                        // Ask about this stop
-                        Button {
-                            showStopChat = true
-                        } label: {
-                            Label("Ask about this stop", systemImage: "bubble.left.and.text.bubble.right")
-                                .font(.subheadline.bold())
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
+                        // Chat buttons
+                        HStack(spacing: 12) {
+                            Button {
+                                showStopChat = true
+                            } label: {
+                                Label("About this stop", systemImage: "mappin.circle")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.accent)
+
+                            Button {
+                                showGuideChat = true
+                            } label: {
+                                Label("Ask guide", systemImage: "bubble.left.and.text.bubble.right")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.accent)
 
                         // Navigation buttons
                         HStack(spacing: 12) {
@@ -370,6 +384,12 @@ struct TourView: View {
                 )
             }
         }
+        .sheet(isPresented: $showGuideChat) {
+            GuideChatSheet(
+                tour: tour,
+                locationManager: locationManager
+            )
+        }
     }
 
     private var arrivedBanner: some View {
@@ -394,7 +414,178 @@ struct TourView: View {
     }
 }
 
-// MARK: - Stop Chat Sheet
+// MARK: - Guide Chat Sheet (general questions while on tour)
+
+struct GuideChatSheet: View {
+    let tour: Tour
+    let locationManager: LocationManager
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var messages: [ChatMessage] = []
+    @State private var inputText: String = ""
+    @State private var isTyping: Bool = false
+    @FocusState private var isInputFocused: Bool
+
+    private let claudeAPI = ClaudeAPIService()
+    private let tourGuideService = TourGuideService()
+
+    private var quickQuestions: [String] {
+        [
+            "Where should I eat nearby?",
+            "Is this area safe at night?",
+            "How do I get to the city center?",
+            "What's the best coffee shop around here?",
+            "Any hidden gems nearby?",
+            "What's the local specialty food?"
+        ]
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Context header
+                HStack(spacing: 10) {
+                    Image(systemName: "globe.americas.fill")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading) {
+                        Text("AI Travel Guide")
+                            .font(.subheadline.bold())
+                        Text(locationManager.locationDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Label("On Tour", systemImage: "figure.walk")
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.blue.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.blue)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color(.secondarySystemBackground))
+
+                // Messages
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(messages) { message in
+                                ChatBubble(message: message)
+                            }
+                            if isTyping {
+                                TypingIndicator()
+                            }
+                            Color.clear.frame(height: 1).id("bottom")
+                        }
+                        .padding()
+                    }
+                    .onChange(of: messages.count) { _, _ in
+                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+
+                // Quick questions
+                if messages.count <= 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(quickQuestions, id: \.self) { question in
+                                Button {
+                                    inputText = question
+                                    sendMessage()
+                                } label: {
+                                    Text(question)
+                                        .font(.caption)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color(.secondarySystemBackground), in: Capsule())
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                    }
+                }
+
+                // Input
+                HStack(spacing: 12) {
+                    TextField("Ask anything about the area...", text: $inputText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...3)
+                        .focused($isInputFocused)
+                        .submitLabel(.send)
+                        .onSubmit { sendMessage() }
+
+                    Button {
+                        sendMessage()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .blue)
+                    }
+                    .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isTyping)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .background(.bar)
+            }
+            .navigationTitle("Travel Guide")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            let city = locationManager.currentCity ?? "the area"
+            messages.append(ChatMessage.assistantMessage(
+                "I'm your travel guide for \(city). Ask me anything — restaurant recommendations, transport tips, safety advice, local customs, or whatever's on your mind!"
+            ))
+        }
+    }
+
+    private func sendMessage() {
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        messages.append(ChatMessage.userMessage(text))
+        inputText = ""
+        isTyping = true
+
+        Task {
+            let response: String
+
+            if APIKeyManager.shared.hasAPIKey {
+                let context = tourGuideService.buildLocationContext(
+                    location: locationManager.currentLocation,
+                    placemark: locationManager.currentPlacemark,
+                    nearbyPOIs: [],
+                    currentTour: tour
+                )
+                response = await claudeAPI.ask(
+                    question: text,
+                    conversationHistory: messages,
+                    locationContext: context
+                )
+            } else {
+                response = tourGuideService.generateFallbackResponse(
+                    to: text,
+                    location: locationManager.currentLocation,
+                    placemark: locationManager.currentPlacemark,
+                    nearbyPOIs: [],
+                    currentTour: tour
+                )
+            }
+
+            messages.append(ChatMessage.assistantMessage(response))
+            isTyping = false
+        }
+    }
+}
+
+// MARK: - Stop Chat Sheet (questions about current stop)
 
 struct StopChatSheet: View {
     let stop: TourStop
