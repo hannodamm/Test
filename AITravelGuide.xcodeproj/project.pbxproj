@@ -28,6 +28,9 @@
 		A10000010000000000000019 /* ExploreViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019; };
 		A10000010000000000000020 /* HighlightCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000020; };
 		A10000010000000000000021 /* MapSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021; };
+		A10000010000000000000022 /* APIKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000024; };
+		A10000010000000000000023 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000025; };
+		A10000010000000000000024 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000026; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +58,9 @@
 		A20000010000000000000021 /* MapSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSearchService.swift; sourceTree = "<group>"; };
 		A20000010000000000000022 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000010000000000000023 /* AITravelGuide.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AITravelGuide.entitlements; sourceTree = "<group>"; };
+		A20000010000000000000024 /* APIKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyManager.swift; sourceTree = "<group>"; };
+		A20000010000000000000025 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
+		A20000010000000000000026 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +115,8 @@
 				A20000010000000000000008 /* LocationManager.swift */,
 				A20000010000000000000009 /* TourGuideService.swift */,
 				A20000010000000000000021 /* MapSearchService.swift */,
+				A20000010000000000000024 /* APIKeyManager.swift */,
+				A20000010000000000000025 /* ClaudeAPIService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -120,6 +128,7 @@
 				A20000010000000000000011 /* TourView.swift */,
 				A20000010000000000000012 /* ChatView.swift */,
 				A20000010000000000000013 /* NearbyHighlightsView.swift */,
+				A20000010000000000000026 /* SettingsView.swift */,
 				A40000010000000000000006 /* Components */,
 			);
 			path = Views;
@@ -251,6 +260,9 @@
 				A10000010000000000000019 /* ExploreViewModel.swift in Sources */,
 				A10000010000000000000020 /* HighlightCard.swift in Sources */,
 				A10000010000000000000021 /* MapSearchService.swift in Sources */,
+				A10000010000000000000022 /* APIKeyManager.swift in Sources */,
+				A10000010000000000000023 /* ClaudeAPIService.swift in Sources */,
+				A10000010000000000000024 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

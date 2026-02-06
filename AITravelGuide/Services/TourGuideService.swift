@@ -5,7 +5,6 @@ import MapKit
 @MainActor
 final class TourGuideService: ObservableObject {
     @Published var isGeneratingTour: Bool = false
-    @Published var isGeneratingResponse: Bool = false
     @Published var currentTour: Tour?
 
     private let mapSearchService = MapSearchService()
@@ -92,34 +91,41 @@ final class TourGuideService: ObservableObject {
         return tour
     }
 
-    // MARK: - AI Chat Response
+    // MARK: - Offline Fallback Response (used when no API key is set)
 
-    func generateResponse(
+    func generateFallbackResponse(
         to question: String,
         location: CLLocation?,
         placemark: CLPlacemark?,
         nearbyPOIs: [PointOfInterest],
-        currentTour: Tour?,
-        conversationHistory: [ChatMessage]
-    ) async -> String {
-        isGeneratingResponse = true
-        defer { isGeneratingResponse = false }
-
-        // Build context from real location data
+        currentTour: Tour?
+    ) -> String {
         let context = buildLocationContext(
             location: location,
             placemark: placemark,
             nearbyPOIs: nearbyPOIs,
             currentTour: currentTour
         )
+        return generateContextualResponse(question: question, context: context)
+    }
 
-        // Simulate AI processing delay
-        try? await Task.sleep(nanoseconds: 800_000_000)
+    // MARK: - Build Location Context (shared with ClaudeAPIService)
 
-        return generateContextualResponse(
-            question: question,
-            context: context,
-            history: conversationHistory
+    func buildLocationContext(
+        location: CLLocation?,
+        placemark: CLPlacemark?,
+        nearbyPOIs: [PointOfInterest],
+        currentTour: Tour?
+    ) -> LocationContext {
+        LocationContext(
+            city: placemark?.locality,
+            country: placemark?.country,
+            neighborhood: placemark?.subLocality,
+            coordinate: location?.coordinate,
+            nearbyPOINames: nearbyPOIs.prefix(10).map { $0.name },
+            nearbyPOICategories: Array(Set(nearbyPOIs.map { $0.category.rawValue })),
+            currentTourName: currentTour?.name,
+            currentTourCategory: currentTour?.category.rawValue
         )
     }
 
@@ -327,28 +333,9 @@ final class TourGuideService: ObservableObject {
         }
     }
 
-    private func buildLocationContext(
-        location: CLLocation?,
-        placemark: CLPlacemark?,
-        nearbyPOIs: [PointOfInterest],
-        currentTour: Tour?
-    ) -> LocationContext {
-        LocationContext(
-            city: placemark?.locality,
-            country: placemark?.country,
-            neighborhood: placemark?.subLocality,
-            coordinate: location?.coordinate,
-            nearbyPOINames: nearbyPOIs.prefix(10).map { $0.name },
-            nearbyPOICategories: Array(Set(nearbyPOIs.map { $0.category.rawValue })),
-            currentTourName: currentTour?.name,
-            currentTourCategory: currentTour?.category.rawValue
-        )
-    }
-
     private func generateContextualResponse(
         question: String,
-        context: LocationContext,
-        history: [ChatMessage]
+        context: LocationContext
     ) -> String {
         let lowered = question.lowercased()
         let location = context.city ?? context.neighborhood ?? "your area"
@@ -458,15 +445,4 @@ final class TourGuideService: ObservableObject {
             Try asking me about restaurants, historical sites, safety tips, or let me create a themed tour for you!
             """
     }
-}
-
-private struct LocationContext {
-    let city: String?
-    let country: String?
-    let neighborhood: String?
-    let coordinate: CLLocationCoordinate2D?
-    let nearbyPOINames: [String]
-    let nearbyPOICategories: [String]
-    let currentTourName: String?
-    let currentTourCategory: String?
 }

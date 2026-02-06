@@ -32,6 +32,12 @@ struct ContentView: View {
                     Label("AI Guide", systemImage: "bubble.left.and.text.bubble.right")
                 }
                 .tag(Tab.chat)
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag(Tab.settings)
         }
         .tint(.accentColor)
         .onAppear {
@@ -84,4 +90,5 @@ enum Tab: String {
     case tour
     case highlights
     case chat
+    case settings
 }
