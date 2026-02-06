@@ -6,6 +6,7 @@ struct TourView: View {
     @EnvironmentObject var locationManager: LocationManager
 
     @State private var showStopSheet = false
+    @State private var showStopChat = false
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
 
     var body: some View {
@@ -293,6 +294,18 @@ struct TourView: View {
                             .background(Color.yellow.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                         }
 
+                        // Ask about this stop
+                        Button {
+                            showStopChat = true
+                        } label: {
+                            Label("Ask about this stop", systemImage: "bubble.left.and.text.bubble.right")
+                                .font(.subheadline.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.accent)
+
                         // Navigation buttons
                         HStack(spacing: 12) {
                             Button {
@@ -348,6 +361,15 @@ struct TourView: View {
                 tourViewModel.handleRegionEntry(regionId: id)
             }
         }
+        .sheet(isPresented: $showStopChat) {
+            if let stop = tourViewModel.currentStop {
+                StopChatSheet(
+                    stop: stop,
+                    tour: tour,
+                    locationManager: locationManager
+                )
+            }
+        }
     }
 
     private var arrivedBanner: some View {
@@ -369,6 +391,171 @@ struct TourView: View {
         mapItem.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
         ])
+    }
+}
+
+// MARK: - Stop Chat Sheet
+
+struct StopChatSheet: View {
+    let stop: TourStop
+    let tour: Tour
+    let locationManager: LocationManager
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var messages: [ChatMessage] = []
+    @State private var inputText: String = ""
+    @State private var isTyping: Bool = false
+    @FocusState private var isInputFocused: Bool
+
+    private let claudeAPI = ClaudeAPIService()
+    private let tourGuideService = TourGuideService()
+
+    private var quickQuestions: [String] {
+        [
+            "Tell me more about \(stop.name)",
+            "What's the history of this place?",
+            "Any tips for visiting here?",
+            "What should I see nearby?"
+        ]
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Stop context header
+                HStack(spacing: 10) {
+                    Image(systemName: stop.imageSystemName)
+                        .foregroundStyle(.accent)
+                    VStack(alignment: .leading) {
+                        Text(stop.name)
+                            .font(.subheadline.bold())
+                        Text("Stop \(stop.orderIndex + 1) on \(tour.name)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color(.secondarySystemBackground))
+
+                // Messages
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(messages) { message in
+                                ChatBubble(message: message)
+                            }
+                            if isTyping {
+                                TypingIndicator()
+                            }
+                            Color.clear.frame(height: 1).id("bottom")
+                        }
+                        .padding()
+                    }
+                    .onChange(of: messages.count) { _, _ in
+                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+
+                // Quick questions (shown when chat is fresh)
+                if messages.count <= 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(quickQuestions, id: \.self) { question in
+                                Button {
+                                    inputText = question
+                                    sendMessage()
+                                } label: {
+                                    Text(question)
+                                        .font(.caption)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color(.secondarySystemBackground), in: Capsule())
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                    }
+                }
+
+                // Input
+                HStack(spacing: 12) {
+                    TextField("Ask about \(stop.name)...", text: $inputText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...3)
+                        .focused($isInputFocused)
+                        .submitLabel(.send)
+                        .onSubmit { sendMessage() }
+
+                    Button {
+                        sendMessage()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .accent)
+                    }
+                    .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isTyping)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .background(.bar)
+            }
+            .navigationTitle("Ask About This Stop")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            messages.append(ChatMessage.assistantMessage(
+                "You're at \(stop.name). \(stop.description) Ask me anything about this stop, its history, or what to do here!"
+            ))
+        }
+    }
+
+    private func sendMessage() {
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        messages.append(ChatMessage.userMessage(text))
+        inputText = ""
+        isTyping = true
+
+        Task {
+            let response: String
+
+            if APIKeyManager.shared.hasAPIKey {
+                let context = tourGuideService.buildLocationContext(
+                    location: locationManager.currentLocation,
+                    placemark: locationManager.currentPlacemark,
+                    nearbyPOIs: [],
+                    currentTour: tour
+                )
+                // Prepend stop context to the question so Claude knows which stop we're at
+                let enrichedQuestion = "I'm currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
+                response = await claudeAPI.ask(
+                    question: enrichedQuestion,
+                    conversationHistory: messages,
+                    locationContext: context
+                )
+            } else {
+                response = tourGuideService.generateFallbackResponse(
+                    to: text,
+                    location: locationManager.currentLocation,
+                    placemark: locationManager.currentPlacemark,
+                    nearbyPOIs: [],
+                    currentTour: tour
+                )
+            }
+
+            messages.append(ChatMessage.assistantMessage(response))
+            isTyping = false
+        }
     }
 }
 
