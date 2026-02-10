@@ -49,7 +49,7 @@ struct MapExploreView: View {
     // MARK: - Map
 
     private var mapContent: some View {
-        Map(position: $cameraPosition, selection: $selectedMapItem) {
+        Map(position: $cameraPosition) {
             UserAnnotation()
 
             ForEach(viewModel.filteredPOIs) { poi in
@@ -59,7 +59,6 @@ struct MapExploreView: View {
                             selectedMapItem = poi
                         }
                 }
-                .tag(poi)
             }
 
             if let tour = tourViewModel.currentTour {
