@@ -44,6 +44,13 @@ struct MapExploreView: View {
                 }
             }
         }
+        .onReceive(viewModel.$searchResultRegion) { newRegion in
+            if let region = newRegion {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    cameraPosition = .region(region)
+                }
+            }
+        }
     }
 
     // MARK: - Map
@@ -97,7 +104,16 @@ struct MapExploreView: View {
                         }
                     }
                 if !viewModel.searchText.isEmpty {
-                    Button { viewModel.searchText = "" } label: {
+                    Button {
+                        viewModel.searchText = ""
+                        viewModel.searchResultRegion = nil
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            cameraPosition = .userLocation(fallback: .automatic)
+                        }
+                        if let coord = locationManager.currentLocation?.coordinate {
+                            Task { await viewModel.loadNearbyPOIs(coordinate: coord) }
+                        }
+                    } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }

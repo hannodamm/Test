@@ -14,6 +14,7 @@ final class ExploreViewModel: ObservableObject {
         center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
         span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
     )
+    @Published var searchResultRegion: MKCoordinateRegion?
 
     private let mapSearchService = MapSearchService()
     private var lastSearchCoordinate: CLLocationCoordinate2D?
@@ -49,19 +50,78 @@ final class ExploreViewModel: ObservableObject {
     }
 
     func search(near coordinate: CLLocationCoordinate2D) async {
-        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else {
+            searchResultRegion = nil
             await loadNearbyPOIs(coordinate: coordinate)
             return
         }
 
         isLoading = true
+
+        // First try geocoding the query as a place name (city, address, etc.)
+        let geocodedCoordinate = await geocodeLocation(query) ?? coordinate
+        let searchRadius: CLLocationDistance = geocodedCoordinate.latitude != coordinate.latitude
+            || geocodedCoordinate.longitude != coordinate.longitude ? 5000 : 2000
+
         let results = await mapSearchService.searchForQuery(
-            searchText,
-            coordinate: coordinate,
-            radius: 2000
+            query,
+            coordinate: geocodedCoordinate,
+            radius: searchRadius
         )
         nearbyPOIs = results
+
+        // Move the camera to show search results
+        if !results.isEmpty {
+            searchResultRegion = regionEnclosing(pois: results)
+        } else if geocodedCoordinate.latitude != coordinate.latitude
+            || geocodedCoordinate.longitude != coordinate.longitude {
+            // No POI results but geocoding succeeded — move camera to the geocoded location
+            searchResultRegion = MKCoordinateRegion(
+                center: geocodedCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+            )
+        }
+
         isLoading = false
+    }
+
+    private func geocodeLocation(_ query: String) async -> CLLocationCoordinate2D? {
+        let geocoder = CLGeocoder()
+        do {
+            let placemarks = try await geocoder.geocodeAddressString(query)
+            return placemarks.first?.location?.coordinate
+        } catch {
+            return nil
+        }
+    }
+
+    private func regionEnclosing(pois: [PointOfInterest]) -> MKCoordinateRegion {
+        guard !pois.isEmpty else {
+            return mapRegion
+        }
+
+        var minLat = pois[0].latitude
+        var maxLat = pois[0].latitude
+        var minLon = pois[0].longitude
+        var maxLon = pois[0].longitude
+
+        for poi in pois {
+            minLat = min(minLat, poi.latitude)
+            maxLat = max(maxLat, poi.latitude)
+            minLon = min(minLon, poi.longitude)
+            maxLon = max(maxLon, poi.longitude)
+        }
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2
+        )
+        let span = MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.4, 0.005),
+            longitudeDelta: max((maxLon - minLon) * 1.4, 0.005)
+        )
+        return MKCoordinateRegion(center: center, span: span)
     }
 
     func refreshPOIs(coordinate: CLLocationCoordinate2D) async {
