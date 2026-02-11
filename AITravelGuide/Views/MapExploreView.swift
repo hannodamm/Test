@@ -51,6 +51,10 @@ struct MapExploreView: View {
                 }
             }
         }
+        .onReceive(viewModel.$searchedCoordinate) { coord in
+            tourViewModel.customTourLocation = coord
+            tourViewModel.customTourLocationName = viewModel.searchedLocationName
+        }
     }
 
     // MARK: - Map
@@ -107,6 +111,8 @@ struct MapExploreView: View {
                     Button {
                         viewModel.searchText = ""
                         viewModel.searchResultRegion = nil
+                        viewModel.searchedCoordinate = nil
+                        viewModel.searchedLocationName = nil
                         withAnimation(.easeInOut(duration: 0.5)) {
                             cameraPosition = .userLocation(fallback: .automatic)
                         }

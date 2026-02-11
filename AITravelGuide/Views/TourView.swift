@@ -40,7 +40,9 @@ struct TourView: View {
                         .foregroundStyle(.accent)
                     Text("Create a Tour")
                         .font(.title2.bold())
-                    Text("Generate a personalized walking tour based on your current location")
+                    Text(tourViewModel.customTourLocationName != nil
+                        ? "Generate a personalized walking tour in \(tourViewModel.customTourLocationName!)"
+                        : "Generate a personalized walking tour based on your current location")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -69,25 +71,19 @@ struct TourView: View {
                     .padding(.horizontal)
                 }
 
-                // Current location info
-                if let placemark = locationManager.currentPlacemark {
-                    HStack {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(.blue)
-                        Text(locationManager.locationDescription)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                // Location info
+                tourLocationInfo
                     .padding(.horizontal)
-                }
 
                 // Generate button
                 Button {
                     Task {
-                        if let coord = locationManager.currentLocation?.coordinate {
+                        if let customCoord = tourViewModel.customTourLocation {
+                            await tourViewModel.generateTour(
+                                coordinate: customCoord,
+                                placemark: nil
+                            )
+                        } else if let coord = locationManager.currentLocation?.coordinate {
                             await tourViewModel.generateTour(
                                 coordinate: coord,
                                 placemark: locationManager.currentPlacemark
@@ -95,13 +91,18 @@ struct TourView: View {
                         }
                     }
                 } label: {
-                    Label("Generate Tour", systemImage: "wand.and.stars")
+                    Label(
+                        tourViewModel.customTourLocation != nil
+                            ? "Generate Tour in \(tourViewModel.customTourLocationName ?? "Searched Location")"
+                            : "Generate Tour",
+                        systemImage: "wand.and.stars"
+                    )
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(locationManager.currentLocation == nil)
+                .disabled(locationManager.currentLocation == nil && tourViewModel.customTourLocation == nil)
                 .padding(.horizontal)
 
                 // Tour history
@@ -122,6 +123,48 @@ struct TourView: View {
         }
     }
 
+    // MARK: - Tour Location Info
+
+    private var tourLocationInfo: some View {
+        Group {
+            if let customName = tourViewModel.customTourLocationName {
+                HStack {
+                    Image(systemName: "map.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(customName)
+                            .font(.subheadline.bold())
+                        Text("Searched location from Explore tab")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        tourViewModel.customTourLocation = nil
+                        tourViewModel.customTourLocationName = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            } else if locationManager.currentPlacemark != nil {
+                HStack {
+                    Image(systemName: "location.fill")
+                        .foregroundStyle(.blue)
+                    Text(locationManager.locationDescription)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+
     // MARK: - Generating View
 
     private var generatingView: some View {
@@ -131,7 +174,9 @@ struct TourView: View {
                 .scaleEffect(1.5)
             Text("Generating your tour...")
                 .font(.headline)
-            Text("Finding the best stops near you")
+            Text(tourViewModel.customTourLocationName != nil
+                ? "Finding the best stops in \(tourViewModel.customTourLocationName!)"
+                : "Finding the best stops near you")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer()

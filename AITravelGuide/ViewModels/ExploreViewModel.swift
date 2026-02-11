@@ -15,6 +15,8 @@ final class ExploreViewModel: ObservableObject {
         span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
     )
     @Published var searchResultRegion: MKCoordinateRegion?
+    @Published var searchedCoordinate: CLLocationCoordinate2D?
+    @Published var searchedLocationName: String?
 
     private let mapSearchService = MapSearchService()
     private var lastSearchCoordinate: CLLocationCoordinate2D?
@@ -53,6 +55,8 @@ final class ExploreViewModel: ObservableObject {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
             searchResultRegion = nil
+            searchedCoordinate = nil
+            searchedLocationName = nil
             await loadNearbyPOIs(coordinate: coordinate)
             return
         }
@@ -61,8 +65,18 @@ final class ExploreViewModel: ObservableObject {
 
         // First try geocoding the query as a place name (city, address, etc.)
         let geocodedCoordinate = await geocodeLocation(query) ?? coordinate
-        let searchRadius: CLLocationDistance = geocodedCoordinate.latitude != coordinate.latitude
-            || geocodedCoordinate.longitude != coordinate.longitude ? 5000 : 2000
+        let didGeocode = geocodedCoordinate.latitude != coordinate.latitude
+            || geocodedCoordinate.longitude != coordinate.longitude
+        let searchRadius: CLLocationDistance = didGeocode ? 5000 : 2000
+
+        // Store the searched location for tour generation
+        if didGeocode {
+            searchedCoordinate = geocodedCoordinate
+            searchedLocationName = query.capitalized
+        } else {
+            searchedCoordinate = nil
+            searchedLocationName = nil
+        }
 
         let results = await mapSearchService.searchForQuery(
             query,
