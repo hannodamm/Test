@@ -35,7 +35,7 @@ final class ClaudeAPIService: ObservableObject {
             return try await callAPI(apiKey: apiKey, system: systemPrompt, messages: messages)
         } catch {
             lastError = error.localizedDescription
-            return "I'm having trouble connecting right now. Please check your API key and internet connection, then try again."
+            return "I'm having trouble connecting: \(error.localizedDescription)"
         }
     }
 
@@ -192,6 +192,8 @@ final class ClaudeAPIService: ObservableObject {
 
     private func buildMessages(history: [ChatMessage], newQuestion: String) -> [APIMessage] {
         // Include recent conversation history for context (last 10 messages)
+        // The history already contains the latest user message, so we only
+        // append newQuestion if it isn't the last entry.
         var apiMessages: [APIMessage] = []
 
         let recentHistory = history.suffix(10)
@@ -206,7 +208,17 @@ final class ClaudeAPIService: ObservableObject {
             }
         }
 
-        apiMessages.append(APIMessage(role: "user", content: newQuestion))
+        // Only add the question if it wasn't already the last message in history
+        let lastUserContent = apiMessages.last(where: { $0.role == "user" })?.content
+        if lastUserContent != newQuestion {
+            apiMessages.append(APIMessage(role: "user", content: newQuestion))
+        }
+
+        // Ensure messages start with a user message (API requirement)
+        if let first = apiMessages.first, first.role == "assistant" {
+            apiMessages.removeFirst()
+        }
+
         return apiMessages
     }
 }
