@@ -3,7 +3,7 @@ import MapKit
 import UIKit
 
 struct MapExploreView: View {
-    @StateObject private var viewModel = ExploreViewModel()
+    @EnvironmentObject var viewModel: ExploreViewModel
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var tourViewModel: TourViewModel
 
@@ -50,10 +50,6 @@ struct MapExploreView: View {
                     cameraPosition = .region(region)
                 }
             }
-        }
-        .onReceive(viewModel.$searchedCoordinate) { coord in
-            tourViewModel.customTourLocation = coord
-            tourViewModel.customTourLocationName = viewModel.searchedLocationName
         }
     }
 

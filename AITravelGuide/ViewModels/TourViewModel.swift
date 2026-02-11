@@ -12,8 +12,6 @@ final class TourViewModel: ObservableObject {
     @Published var tourHistory: [Tour] = []
     @Published var showStopDetail: Bool = false
     @Published var arrivedAtStop: Bool = false
-    @Published var customTourLocation: CLLocationCoordinate2D?
-    @Published var customTourLocationName: String?
 
     private let tourGuideService = TourGuideService()
 

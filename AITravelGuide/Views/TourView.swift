@@ -4,6 +4,7 @@ import MapKit
 struct TourView: View {
     @EnvironmentObject var tourViewModel: TourViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var exploreViewModel: ExploreViewModel
 
     @State private var showStopSheet = false
     @State private var showStopChat = false
@@ -40,8 +41,8 @@ struct TourView: View {
                         .foregroundStyle(.accent)
                     Text("Create a Tour")
                         .font(.title2.bold())
-                    Text(tourViewModel.customTourLocationName != nil
-                        ? "Generate a personalized walking tour in \(tourViewModel.customTourLocationName!)"
+                    Text(exploreViewModel.searchedLocationName != nil
+                        ? "Generate a personalized walking tour in \(exploreViewModel.searchedLocationName!)"
                         : "Generate a personalized walking tour based on your current location")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -78,7 +79,7 @@ struct TourView: View {
                 // Generate button
                 Button {
                     Task {
-                        if let customCoord = tourViewModel.customTourLocation {
+                        if let customCoord = exploreViewModel.searchedCoordinate {
                             await tourViewModel.generateTour(
                                 coordinate: customCoord,
                                 placemark: nil
@@ -92,8 +93,8 @@ struct TourView: View {
                     }
                 } label: {
                     Label(
-                        tourViewModel.customTourLocation != nil
-                            ? "Generate Tour in \(tourViewModel.customTourLocationName ?? "Searched Location")"
+                        exploreViewModel.searchedCoordinate != nil
+                            ? "Generate Tour in \(exploreViewModel.searchedLocationName ?? "Searched Location")"
                             : "Generate Tour",
                         systemImage: "wand.and.stars"
                     )
@@ -102,7 +103,7 @@ struct TourView: View {
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(locationManager.currentLocation == nil && tourViewModel.customTourLocation == nil)
+                .disabled(locationManager.currentLocation == nil && exploreViewModel.searchedCoordinate == nil)
                 .padding(.horizontal)
 
                 // Tour history
@@ -127,7 +128,7 @@ struct TourView: View {
 
     private var tourLocationInfo: some View {
         Group {
-            if let customName = tourViewModel.customTourLocationName {
+            if let customName = exploreViewModel.searchedLocationName {
                 HStack {
                     Image(systemName: "map.fill")
                         .foregroundStyle(.orange)
@@ -140,8 +141,8 @@ struct TourView: View {
                     }
                     Spacer()
                     Button {
-                        tourViewModel.customTourLocation = nil
-                        tourViewModel.customTourLocationName = nil
+                        exploreViewModel.searchedCoordinate = nil
+                        exploreViewModel.searchedLocationName = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -174,8 +175,8 @@ struct TourView: View {
                 .scaleEffect(1.5)
             Text("Generating your tour...")
                 .font(.headline)
-            Text(tourViewModel.customTourLocationName != nil
-                ? "Finding the best stops in \(tourViewModel.customTourLocationName!)"
+            Text(exploreViewModel.searchedLocationName != nil
+                ? "Finding the best stops in \(exploreViewModel.searchedLocationName!)"
                 : "Finding the best stops near you")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
