@@ -21,7 +21,12 @@ final class TourGuideService: ObservableObject {
         isGeneratingTour = true
         defer { isGeneratingTour = false }
 
-        let locationName = placemark?.locality ?? await reverseGeocode(coordinate) ?? "the area"
+        var locationName = placemark?.locality ?? "the area"
+        if locationName == "the area" {
+            if let geocoded = await reverseGeocode(coordinate) {
+                locationName = geocoded
+            }
+        }
 
         // AI-first approach: Ask Claude to design the tour, then geocode the stops
         if APIKeyManager.shared.hasAPIKey {
