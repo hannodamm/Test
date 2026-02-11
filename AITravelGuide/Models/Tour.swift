@@ -12,6 +12,7 @@ struct Tour: Identifiable, Codable {
     var createdAt: Date
     var centerLatitude: Double
     var centerLongitude: Double
+    var locationName: String
 
     var centerCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: centerLatitude, longitude: centerLongitude)
@@ -25,7 +26,8 @@ struct Tour: Identifiable, Codable {
         estimatedDurationMinutes: Int,
         distanceMeters: Double,
         category: TourCategory,
-        centerCoordinate: CLLocationCoordinate2D
+        centerCoordinate: CLLocationCoordinate2D,
+        locationName: String = "the area"
     ) {
         self.id = id
         self.name = name
@@ -37,6 +39,7 @@ struct Tour: Identifiable, Codable {
         self.createdAt = Date()
         self.centerLatitude = centerCoordinate.latitude
         self.centerLongitude = centerCoordinate.longitude
+        self.locationName = locationName
     }
 
     var formattedDuration: String {

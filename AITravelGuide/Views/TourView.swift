@@ -9,7 +9,8 @@ struct TourView: View {
     @State private var showStopSheet = false
     @State private var showStopChat = false
     @State private var showGuideChat = false
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var showEndTourConfirmation = false
+    @State private var cameraPosition: MapCameraPosition = .automatic
 
     var body: some View {
         NavigationStack {
@@ -114,8 +115,14 @@ struct TourView: View {
                             .padding(.horizontal)
 
                         ForEach(tourViewModel.tourHistory) { tour in
-                            TourHistoryRow(tour: tour)
-                                .padding(.horizontal)
+                            Button {
+                                tourViewModel.currentTour = tour
+                                tourViewModel.currentStopIndex = 0
+                            } label: {
+                                TourHistoryRow(tour: tour)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
                         }
                     }
                 }
@@ -208,7 +215,7 @@ struct TourView: View {
                 .padding()
 
                 // Mini map
-                Map {
+                Map(initialPosition: .region(regionForTour(tour))) {
                     ForEach(tour.stops) { stop in
                         Annotation(stop.name, coordinate: stop.coordinate) {
                             TourStopMarker(stop: stop, isActive: false)
@@ -217,7 +224,8 @@ struct TourView: View {
                     MapPolyline(coordinates: tour.stops.map { $0.coordinate })
                         .stroke(.blue, lineWidth: 3)
                 }
-                .frame(height: 200)
+                .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+                .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
@@ -282,8 +290,18 @@ struct TourView: View {
             .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
             .mapControls {
                 MapUserLocationButton()
+                MapCompass()
             }
             .frame(height: 300)
+            .onAppear {
+                // Center on the first stop when the active tour view appears
+                if let firstStop = tour.stops.first {
+                    cameraPosition = .region(MKCoordinateRegion(
+                        center: firstStop.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
+                    ))
+                }
+            }
 
             // Progress bar
             ProgressView(value: tourViewModel.progress)
@@ -370,6 +388,9 @@ struct TourView: View {
                         HStack(spacing: 12) {
                             Button {
                                 tourViewModel.goToPreviousStop()
+                                if let prev = tourViewModel.currentStop {
+                                    focusOnStop(prev)
+                                }
                             } label: {
                                 Image(systemName: "chevron.left")
                                     .frame(maxWidth: .infinity)
@@ -387,6 +408,9 @@ struct TourView: View {
 
                             Button {
                                 tourViewModel.advanceToNextStop()
+                                if let next = tourViewModel.currentStop {
+                                    focusOnStop(next)
+                                }
                             } label: {
                                 HStack {
                                     Text(tourViewModel.stopsRemaining > 0 ? "Next" : "Finish")
@@ -397,15 +421,39 @@ struct TourView: View {
                             .buttonStyle(.borderedProminent)
                         }
 
+                        // Show all stops on map
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                cameraPosition = .region(regionForTour(tour))
+                            }
+                        } label: {
+                            Label("Show Full Route", systemImage: "map")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+
                         // End tour button
                         Button(role: .destructive) {
-                            locationManager.stopMonitoringAllRegions()
-                            tourViewModel.endTour()
+                            showEndTourConfirmation = true
                         } label: {
                             Text("End Tour")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
+                        .confirmationDialog(
+                            "End this tour?",
+                            isPresented: $showEndTourConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("End Tour", role: .destructive) {
+                                locationManager.stopMonitoringAllRegions()
+                                tourViewModel.endTour()
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Your progress will be saved to tour history.")
+                        }
                     }
                     .padding()
                 }
@@ -450,6 +498,48 @@ struct TourView: View {
         .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 
+    // MARK: - Map Camera Helpers
+
+    private func regionForTour(_ tour: Tour) -> MKCoordinateRegion {
+        guard !tour.stops.isEmpty else {
+            return MKCoordinateRegion(
+                center: tour.centerCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+            )
+        }
+
+        var minLat = tour.stops[0].latitude
+        var maxLat = tour.stops[0].latitude
+        var minLon = tour.stops[0].longitude
+        var maxLon = tour.stops[0].longitude
+
+        for stop in tour.stops {
+            minLat = min(minLat, stop.latitude)
+            maxLat = max(maxLat, stop.latitude)
+            minLon = min(minLon, stop.longitude)
+            maxLon = max(maxLon, stop.longitude)
+        }
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2
+        )
+        let span = MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.5, 0.005),
+            longitudeDelta: max((maxLon - minLon) * 1.5, 0.005)
+        )
+        return MKCoordinateRegion(center: center, span: span)
+    }
+
+    private func focusOnStop(_ stop: TourStop) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: stop.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
+            ))
+        }
+    }
+
     private func openDirections(to stop: TourStop) {
         let placemark = MKPlacemark(coordinate: stop.coordinate)
         let mapItem = MKMapItem(placemark: placemark)
@@ -475,6 +565,14 @@ struct GuideChatSheet: View {
     private let claudeAPI = ClaudeAPIService()
     private let tourGuideService = TourGuideService()
 
+    /// Use the tour's location name, falling back to GPS-based description
+    private var tourLocationDescription: String {
+        if tour.locationName != "the area" {
+            return tour.locationName
+        }
+        return locationManager.locationDescription
+    }
+
     private var quickQuestions: [String] {
         [
             "Where should I eat nearby?",
@@ -496,7 +594,7 @@ struct GuideChatSheet: View {
                     VStack(alignment: .leading) {
                         Text("AI Travel Guide")
                             .font(.subheadline.bold())
-                        Text(locationManager.locationDescription)
+                        Text(tourLocationDescription)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -585,7 +683,7 @@ struct GuideChatSheet: View {
         }
         .presentationDetents([.medium, .large])
         .onAppear {
-            let city = locationManager.currentCity ?? "the area"
+            let city = tour.locationName != "the area" ? tour.locationName : (locationManager.currentCity ?? "the area")
             messages.append(ChatMessage.assistantMessage(
                 "I'm your travel guide for \(city). Ask me anything — restaurant recommendations, transport tips, safety advice, local customs, or whatever's on your mind!"
             ))
@@ -603,23 +701,31 @@ struct GuideChatSheet: View {
         Task {
             let response: String
 
+            // Use tour's location for context, not the user's GPS
+            let tourLocation = CLLocation(
+                latitude: tour.centerLatitude,
+                longitude: tour.centerLongitude
+            )
+
             if APIKeyManager.shared.hasAPIKey {
                 let context = tourGuideService.buildLocationContext(
-                    location: locationManager.currentLocation,
-                    placemark: locationManager.currentPlacemark,
+                    location: tourLocation,
+                    placemark: nil,
                     nearbyPOIs: [],
                     currentTour: tour
                 )
+                // Enrich the question with the tour's city so Claude knows the correct location
+                let enrichedQuestion = "I'm on a tour in \(tour.locationName). \(text)"
                 response = await claudeAPI.ask(
-                    question: text,
+                    question: enrichedQuestion,
                     conversationHistory: messages,
                     locationContext: context
                 )
             } else {
                 response = tourGuideService.generateFallbackResponse(
                     to: text,
-                    location: locationManager.currentLocation,
-                    placemark: locationManager.currentPlacemark,
+                    location: tourLocation,
+                    placemark: nil,
                     nearbyPOIs: [],
                     currentTour: tour
                 )
@@ -766,15 +872,21 @@ struct StopChatSheet: View {
         Task {
             let response: String
 
+            // Use the stop's coordinate for context, not GPS
+            let stopLocation = CLLocation(
+                latitude: stop.latitude,
+                longitude: stop.longitude
+            )
+
             if APIKeyManager.shared.hasAPIKey {
                 let context = tourGuideService.buildLocationContext(
-                    location: locationManager.currentLocation,
-                    placemark: locationManager.currentPlacemark,
+                    location: stopLocation,
+                    placemark: nil,
                     nearbyPOIs: [],
                     currentTour: tour
                 )
-                // Prepend stop context to the question so Claude knows which stop we're at
-                let enrichedQuestion = "I'm currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
+                // Prepend stop context so Claude knows which stop and city we're in
+                let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
                 response = await claudeAPI.ask(
                     question: enrichedQuestion,
                     conversationHistory: messages,
@@ -783,8 +895,8 @@ struct StopChatSheet: View {
             } else {
                 response = tourGuideService.generateFallbackResponse(
                     to: text,
-                    location: locationManager.currentLocation,
-                    placemark: locationManager.currentPlacemark,
+                    location: stopLocation,
+                    placemark: nil,
                     nearbyPOIs: [],
                     currentTour: tour
                 )

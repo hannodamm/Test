@@ -168,7 +168,8 @@ final class TourGuideService: ObservableObject {
                 estimatedDurationMinutes: walkingMinutes + stopMinutes,
                 distanceMeters: totalDistance,
                 category: category,
-                centerCoordinate: coordinate
+                centerCoordinate: coordinate,
+                locationName: locationName
             )
         } catch {
             return nil
@@ -336,7 +337,8 @@ final class TourGuideService: ObservableObject {
             estimatedDurationMinutes: walkingMinutes + stopMinutes,
             distanceMeters: totalDistance,
             category: category,
-            centerCoordinate: coordinate
+            centerCoordinate: coordinate,
+            locationName: locationName
         )
 
         self.currentTour = tour
@@ -427,9 +429,14 @@ final class TourGuideService: ObservableObject {
         nearbyPOIs: [PointOfInterest],
         currentTour: Tour?
     ) -> LocationContext {
-        LocationContext(
-            city: placemark?.locality,
-            country: placemark?.country,
+        // Use the tour's stored location name when placemark isn't available
+        // (e.g. touring Munich from a Simulator in Cupertino)
+        let city = placemark?.locality ?? currentTour?.locationName
+        let country = placemark?.country
+
+        return LocationContext(
+            city: city,
+            country: country,
             neighborhood: placemark?.subLocality,
             coordinate: location?.coordinate,
             nearbyPOINames: nearbyPOIs.prefix(10).map { $0.name },
