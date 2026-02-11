@@ -59,12 +59,17 @@ final class TourGuideService: ObservableObject {
             return nil
         }
 
+        let categoryGuidance = guidanceForCategory(category, locationName: locationName)
+
         let prompt = """
         Design a \(category.rawValue) walking tour in \(locationName) \
         (near \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))).
 
         Pick \(numberOfStops) real, specific places that a knowledgeable local guide would recommend. \
         They should be within walking distance of each other (roughly 2km total) and ordered as a logical walking route.
+
+        IMPORTANT - What to include for this \(category.rawValue) tour:
+        \(categoryGuidance)
 
         Respond in this EXACT JSON format (no markdown, no code fences, just raw JSON):
         {
@@ -89,8 +94,8 @@ final class TourGuideService: ObservableObject {
         - The searchQuery must be specific enough to find the exact place on a map
         - iconType must be one of: landmark, restaurant, museum, park, shopping, entertainment, transit, hotel, historical, viewpoint
         - Order stops as a logical walking route, not random
-        - For \(category.rawValue) tours, focus on what makes this category special in \(locationName)
         - Make descriptions vivid and specific to each place, never generic
+        - DO NOT just list museums unless this is specifically an Art tour
         """
 
         let system = """
@@ -471,6 +476,67 @@ final class TourGuideService: ObservableObject {
     }
 
     // MARK: - Private Helpers
+
+    private func guidanceForCategory(_ category: TourCategory, locationName: String) -> String {
+        switch category {
+        case .historical:
+            return """
+            Focus on HISTORIC SITES, not museums. Pick places like: old city gates, medieval squares, \
+            ancient ruins, historic battlefields, old town halls, historic bridges, war memorials, \
+            historic churches/cathedrals (for their age, not religion), former royal residences, \
+            historic marketplaces, old fortifications/walls, and sites where important events happened. \
+            Each stop should tell a story about \(locationName)'s past. Avoid museums entirely.
+            """
+        case .cultural:
+            return """
+            Focus on places that showcase the LIVING CULTURE of \(locationName): theaters, opera houses, \
+            local markets where residents shop, traditional neighborhoods, places of worship known for \
+            their community role, cultural centers, traditional craft workshops, iconic local gathering \
+            spots (famous cafes, beer halls, tea houses), festival grounds, and places that represent \
+            the daily life and traditions of locals. Avoid museums and purely historic monuments.
+            """
+        case .food:
+            return """
+            Pick the best SPECIFIC restaurants, bakeries, food markets, street food spots, \
+            breweries/wineries, cafes, and food halls in \(locationName). Choose places famous for \
+            a particular dish or drink. Include a mix: one iconic/famous spot, one hidden local gem, \
+            one market or food hall, and others. Name the actual establishment, not just "a restaurant."
+            """
+        case .nature:
+            return """
+            Focus on GREEN SPACES AND NATURE: parks, botanical gardens, riverside walks, lakes, \
+            hilltop viewpoints, nature reserves, urban forests, garden terraces, waterfall spots, \
+            and scenic promenades. Pick places where someone can enjoy being outdoors and in nature, \
+            not buildings.
+            """
+        case .architecture:
+            return """
+            Focus on BUILDINGS AND STRUCTURES worth seeing for their design: cathedrals, palaces, \
+            modern skyscrapers, famous bridges, opera houses, train stations with grand architecture, \
+            unique residential buildings, city halls, towers, and buildings by famous architects. \
+            Each stop should be a building or structure, not a museum or park.
+            """
+        case .art:
+            return """
+            Focus on ART: art museums, galleries, street art districts/murals, sculpture gardens, \
+            public art installations, artist studios open to visitors, design museums, photography \
+            galleries, and art-focused neighborhoods. This is the one tour type where museums are \
+            appropriate — but mix in outdoor art and galleries too.
+            """
+        case .nightlife:
+            return """
+            Pick the best EVENING AND NIGHT spots: iconic bars, rooftop bars with views, cocktail bars, \
+            live music venues, jazz clubs, beer gardens, wine bars, night markets, and areas known for \
+            their nightlife strip. Choose specific named establishments, not generic categories.
+            """
+        case .general:
+            return """
+            Pick the TOP HIGHLIGHTS a first-time visitor absolutely must see in \(locationName). \
+            Include a mix: one iconic landmark, one great viewpoint, one cultural spot, one food \
+            recommendation, and one hidden gem that most tourists miss. Make it a "best of" tour.
+            """
+        }
+    }
 
     private func searchQueriesForTour(_ category: TourCategory) -> [String] {
         switch category {
