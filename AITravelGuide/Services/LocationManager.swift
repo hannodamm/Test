@@ -15,6 +15,8 @@ final class LocationManager: NSObject, ObservableObject {
     private let geocoder = CLGeocoder()
     private var monitoredStopIds: [String: CLCircularRegion] = [:]
 
+    private var hasTriedIPFallback = false
+
     override init() {
         super.init()
         clLocationManager.delegate = self
@@ -89,6 +91,39 @@ final class LocationManager: NSObject, ObservableObject {
         let parts = [currentNeighborhood, currentCity, currentCountry].compactMap { $0 }
         return parts.isEmpty ? "Unknown Location" : parts.joined(separator: ", ")
     }
+
+    // MARK: - IP-Based Location Fallback
+
+    /// When GPS isn't available (e.g. in the Simulator), detect approximate
+    /// location from the device's IP address.
+    func tryIPBasedLocation() async {
+        guard currentLocation == nil, !hasTriedIPFallback else { return }
+        hasTriedIPFallback = true
+
+        guard let url = URL(string: "http://ip-api.com/json/?fields=status,lat,lon,city,country,regionName") else { return }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let result = try JSONDecoder().decode(IPLocationResult.self, from: data)
+
+            guard result.status == "success" else { return }
+
+            let location = CLLocation(latitude: result.lat, longitude: result.lon)
+            self.currentLocation = location
+            _ = await self.reverseGeocode(location)
+        } catch {
+            // IP geolocation failed silently — user can still search locations manually
+        }
+    }
+}
+
+private struct IPLocationResult: Decodable {
+    let status: String
+    let lat: Double
+    let lon: Double
+    let city: String?
+    let country: String?
+    let regionName: String?
 }
 
 extension LocationManager: CLLocationManagerDelegate {
@@ -109,6 +144,12 @@ extension LocationManager: CLLocationManagerDelegate {
             switch manager.authorizationStatus {
             case .authorizedWhenInUse, .authorizedAlways:
                 manager.startUpdatingLocation()
+                // If GPS doesn't respond within 3 seconds (e.g. Simulator),
+                // fall back to IP-based location detection
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await self.tryIPBasedLocation()
+                }
             case .denied, .restricted:
                 self.locationError = LocationError.permissionDenied
             default:

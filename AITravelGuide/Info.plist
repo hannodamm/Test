@@ -26,6 +26,17 @@
 	<string>AI Travel Guide needs your location to create personalized tours and show nearby highlights.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>AI Travel Guide uses your location to provide personalized tours and highlight nearby points of interest.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>ip-api.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
