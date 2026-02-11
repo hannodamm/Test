@@ -21,13 +21,14 @@ final class TourGuideService: ObservableObject {
         isGeneratingTour = true
         defer { isGeneratingTour = false }
 
-        let categories = poiCategoriesForTour(category)
+        // Use targeted search queries per tour type for distinct results
+        let searchQueries = searchQueriesForTour(category)
         var allPOIs: [PointOfInterest] = []
 
-        for cat in categories {
-            let results = await mapSearchService.searchNearby(
+        for query in searchQueries {
+            let results = await mapSearchService.searchForQuery(
+                query,
                 coordinate: coordinate,
-                category: cat,
                 radius: 2000
             )
             allPOIs.append(contentsOf: results)
@@ -365,24 +366,24 @@ final class TourGuideService: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func poiCategoriesForTour(_ category: TourCategory) -> [POICategory] {
+    private func searchQueriesForTour(_ category: TourCategory) -> [String] {
         switch category {
         case .historical:
-            return [.historical, .museum, .landmark]
+            return ["historic site", "monument", "memorial", "castle", "ruins"]
         case .cultural:
-            return [.museum, .landmark, .entertainment]
+            return ["theater", "cultural center", "temple", "church", "synagogue", "mosque", "library"]
         case .food:
-            return [.restaurant]
+            return ["restaurant", "bakery", "cafe", "food market", "brewery"]
         case .nature:
-            return [.park, .viewpoint]
+            return ["park", "garden", "botanical", "lake", "trail"]
         case .architecture:
-            return [.landmark, .historical]
+            return ["cathedral", "palace", "tower", "bridge", "opera house", "city hall"]
         case .art:
-            return [.museum, .entertainment, .landmark]
+            return ["art gallery", "art museum", "street art", "sculpture", "design museum"]
         case .nightlife:
-            return [.entertainment, .restaurant]
+            return ["bar", "cocktail bar", "nightclub", "live music", "rooftop bar"]
         case .general:
-            return [.landmark, .museum, .park, .restaurant, .historical]
+            return ["landmark", "museum", "park", "tourist attraction", "famous"]
         }
     }
 
