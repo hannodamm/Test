@@ -3,6 +3,19 @@ import CoreLocation
 import MapKit
 import Combine
 
+struct WalkingDirectionStep: Identifiable {
+    let id = UUID()
+    let instructions: String
+    let distance: CLLocationDistance
+
+    var formattedDistance: String {
+        if distance < 1000 {
+            return String(format: "%.0f m", distance)
+        }
+        return String(format: "%.1f km", distance / 1000)
+    }
+}
+
 @MainActor
 final class TourViewModel: ObservableObject {
     @Published var currentTour: Tour?
@@ -17,6 +30,8 @@ final class TourViewModel: ObservableObject {
     // Walking directions between stops
     @Published var walkingRouteSegments: [[CLLocationCoordinate2D]] = []
     @Published var walkingETAs: [TimeInterval] = []
+    @Published var walkingSteps: [[WalkingDirectionStep]] = []
+    @Published var walkingDistances: [CLLocationDistance] = []
     @Published var isCalculatingRoutes: Bool = false
 
     private let tourGuideService = TourGuideService()
@@ -55,6 +70,25 @@ final class TourViewModel: ObservableObject {
         guard seconds > 0 else { return nil }
         let minutes = Int(seconds / 60)
         return minutes <= 1 ? "1 min walk" : "\(minutes) min walk"
+    }
+
+    /// Steps for the current segment (current stop -> next stop)
+    var currentSegmentSteps: [WalkingDirectionStep] {
+        guard currentStopIndex < walkingSteps.count else { return [] }
+        return walkingSteps[currentStopIndex]
+    }
+
+    /// Route coordinates for the current segment
+    var currentSegmentRoute: [CLLocationCoordinate2D] {
+        guard currentStopIndex < walkingRouteSegments.count else { return [] }
+        return walkingRouteSegments[currentStopIndex]
+    }
+
+    /// Distance for the current segment
+    var currentSegmentDistance: CLLocationDistance? {
+        guard currentStopIndex < walkingDistances.count else { return nil }
+        let d = walkingDistances[currentStopIndex]
+        return d > 0 ? d : nil
     }
 
     // MARK: - Tour Generation
@@ -106,6 +140,8 @@ final class TourViewModel: ObservableObject {
         arrivedAtStop = false
         walkingRouteSegments = []
         walkingETAs = []
+        walkingSteps = []
+        walkingDistances = []
     }
 
     func advanceToNextStop() {
@@ -179,12 +215,16 @@ final class TourViewModel: ObservableObject {
         guard let tour = currentTour, tour.stops.count >= 2 else {
             walkingRouteSegments = []
             walkingETAs = []
+            walkingSteps = []
+            walkingDistances = []
             return
         }
 
         isCalculatingRoutes = true
         var segments: [[CLLocationCoordinate2D]] = []
         var etas: [TimeInterval] = []
+        var allSteps: [[WalkingDirectionStep]] = []
+        var distances: [CLLocationDistance] = []
 
         for i in 0..<(tour.stops.count - 1) {
             let source = tour.stops[i]
@@ -207,19 +247,31 @@ final class TourViewModel: ObservableObject {
                     route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
                     segments.append(coords)
                     etas.append(route.expectedTravelTime)
+                    distances.append(route.distance)
+
+                    let steps = route.steps
+                        .filter { !$0.instructions.isEmpty }
+                        .map { WalkingDirectionStep(instructions: $0.instructions, distance: $0.distance) }
+                    allSteps.append(steps)
                 } else {
                     segments.append([source.coordinate, destination.coordinate])
                     etas.append(0)
+                    allSteps.append([])
+                    distances.append(0)
                 }
             } catch {
                 // Fallback to straight line
                 segments.append([source.coordinate, destination.coordinate])
                 etas.append(0)
+                allSteps.append([])
+                distances.append(0)
             }
         }
 
         walkingRouteSegments = segments
         walkingETAs = etas
+        walkingSteps = allSteps
+        walkingDistances = distances
         isCalculatingRoutes = false
     }
 }

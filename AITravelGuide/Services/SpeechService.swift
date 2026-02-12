@@ -7,6 +7,7 @@ final class SpeechService: NSObject, ObservableObject {
 
     private let synthesizer = AVSpeechSynthesizer()
     private var delegateHandler: SpeechDelegateHandler?
+    private var cachedVoice: AVSpeechSynthesisVoice?
 
     /// Reads voice-enabled preference from UserDefaults (toggled in Settings)
     var voiceEnabled: Bool {
@@ -16,10 +17,26 @@ final class SpeechService: NSObject, ObservableObject {
     private var speechRateValue: Float {
         let index = UserDefaults.standard.integer(forKey: "speechRateIndex")
         switch index {
-        case 0: return 0.42  // slow
-        case 2: return 0.57  // fast
-        default: return 0.50 // normal
+        case 0: return 0.38  // slow — relaxed pace
+        case 2: return 0.48  // fast — brisk but still clear
+        default: return 0.43 // normal — conversational
         }
+    }
+
+    /// Finds the best available English voice, preferring premium > enhanced > default
+    private var preferredVoice: AVSpeechSynthesisVoice? {
+        if let cached = cachedVoice { return cached }
+
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("en") }
+
+        // Try premium first, then enhanced, then fall back to default en-US
+        let voice = voices.first(where: { $0.quality == .premium })
+            ?? voices.first(where: { $0.quality == .enhanced })
+            ?? AVSpeechSynthesisVoice(language: "en-US")
+
+        cachedVoice = voice
+        return voice
     }
 
     override init() {
@@ -43,9 +60,10 @@ final class SpeechService: NSObject, ObservableObject {
 
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = speechRateValue
-        utterance.pitchMultiplier = 1.0
-        utterance.preUtteranceDelay = 0.1
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.pitchMultiplier = 1.05
+        utterance.preUtteranceDelay = 0.2
+        utterance.postUtteranceDelay = 0.1
+        utterance.voice = preferredVoice
         isSpeaking = true
         synthesizer.speak(utterance)
     }
@@ -65,21 +83,54 @@ final class SpeechService: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Convenience Narrations
+    // MARK: - Natural Narrations
 
     func speakStopDescription(_ stop: TourStop) {
-        var text = "\(stop.name). \(stop.description)"
+        var parts: [String] = []
+        parts.append("Welcome to \(stop.name).")
+        parts.append(stop.description)
+
         if let note = stop.historicalNote {
-            text += " \(note)"
+            parts.append("Here's a bit of history. \(note)")
         }
         if let tip = stop.tips {
-            text += " Tip: \(tip)"
+            parts.append("Quick tip: \(tip)")
+        }
+
+        speak(parts.joined(separator: " ... "))
+    }
+
+    func speakTourOverview(_ tour: Tour) {
+        let stopWord = tour.stops.count == 1 ? "stop" : "stops"
+        speak("Welcome to \(tour.name). \(tour.description) You'll be visiting \(tour.stops.count) \(stopWord) over about \(tour.formattedDuration), covering \(tour.formattedDistance). Let's get started!")
+    }
+
+    func speakNavigation(to stop: TourStop, eta: String?) {
+        var text = "Your next stop is \(stop.name)."
+        if let eta {
+            text += " It's about \(eta) away."
         }
         speak(text)
     }
 
-    func speakTourOverview(_ tour: Tour) {
-        speak("\(tour.name). \(tour.description). This tour has \(tour.stops.count) stops and takes about \(tour.formattedDuration).")
+    func speakArrival(at stop: TourStop) {
+        speak("You've arrived at \(stop.name). Let me tell you about this place.")
+    }
+
+    func speakDirectionSummary(to stop: TourStop, steps: [String], distance: String?) {
+        var text = "Walking to \(stop.name)."
+        if let distance {
+            text += " The walk is about \(distance)."
+        }
+        if let first = steps.first {
+            text += " To start, \(first.lowercased())."
+        }
+        speak(text)
+    }
+
+    /// Reset cached voice when user changes language preferences
+    func clearVoiceCache() {
+        cachedVoice = nil
     }
 }
 
