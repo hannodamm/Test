@@ -38,7 +38,7 @@ final class SpeechService: NSObject, ObservableObject {
         stop()
         guard voiceEnabled, !text.isEmpty else { return }
 
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenContent)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let utterance = AVSpeechUtterance(string: text)
