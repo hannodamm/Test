@@ -31,6 +31,8 @@
 		A10000010000000000000022 /* APIKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000024; };
 		A10000010000000000000023 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000025; };
 		A10000010000000000000024 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000026; };
+		A10000010000000000000025 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000027; };
+		A10000010000000000000026 /* TourStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000028; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +63,8 @@
 		A20000010000000000000024 /* APIKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyManager.swift; sourceTree = "<group>"; };
 		A20000010000000000000025 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
 		A20000010000000000000026 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000027 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
+		A20000010000000000000028 /* TourStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourStorageService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,6 +121,8 @@
 				A20000010000000000000021 /* MapSearchService.swift */,
 				A20000010000000000000024 /* APIKeyManager.swift */,
 				A20000010000000000000025 /* ClaudeAPIService.swift */,
+				A20000010000000000000027 /* SpeechService.swift */,
+				A20000010000000000000028 /* TourStorageService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -263,6 +269,8 @@
 				A10000010000000000000022 /* APIKeyManager.swift in Sources */,
 				A10000010000000000000023 /* ClaudeAPIService.swift in Sources */,
 				A10000010000000000000024 /* SettingsView.swift in Sources */,
+				A10000010000000000000025 /* SpeechService.swift in Sources */,
+				A10000010000000000000026 /* TourStorageService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
