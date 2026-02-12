@@ -5,11 +5,14 @@ struct TourView: View {
     @EnvironmentObject var tourViewModel: TourViewModel
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var exploreViewModel: ExploreViewModel
+    @EnvironmentObject var speechService: SpeechService
+    @EnvironmentObject var tourStorageService: TourStorageService
 
     @State private var showStopSheet = false
     @State private var showStopChat = false
     @State private var showGuideChat = false
     @State private var showEndTourConfirmation = false
+    @State private var showRating = false
     @State private var cameraPosition: MapCameraPosition = .automatic
 
     var body: some View {
@@ -27,6 +30,11 @@ struct TourView: View {
             }
             .navigationTitle("Tour")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(isPresented: $showRating) {
+            if let tour = tourViewModel.currentTour ?? tourViewModel.tourHistory.last {
+                TourRatingSheet(tour: tour, tourViewModel: tourViewModel, storageService: tourStorageService)
+            }
         }
     }
 
@@ -118,6 +126,28 @@ struct TourView: View {
                             Button {
                                 tourViewModel.currentTour = tour
                                 tourViewModel.currentStopIndex = 0
+                                Task { await tourViewModel.calculateWalkingRoutes() }
+                            } label: {
+                                TourHistoryRow(tour: tour)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+
+                // Saved tours
+                if !tourStorageService.savedTours.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Saved Tours")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        ForEach(tourStorageService.savedTours) { tour in
+                            Button {
+                                tourViewModel.currentTour = tour
+                                tourViewModel.currentStopIndex = 0
+                                Task { await tourViewModel.calculateWalkingRoutes() }
                             } label: {
                                 TourHistoryRow(tour: tour)
                             }
@@ -198,8 +228,19 @@ struct TourView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Tour info header
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(tour.name)
-                        .font(.title2.bold())
+                    HStack {
+                        Text(tour.name)
+                            .font(.title2.bold())
+                        Spacer()
+                        // Voice narration button
+                        Button {
+                            speechService.toggle("\(tour.name). \(tour.description)")
+                        } label: {
+                            Image(systemName: speechService.isSpeaking ? "stop.circle.fill" : "speaker.wave.2.fill")
+                                .font(.title3)
+                                .foregroundStyle(speechService.isSpeaking ? .red : .accent)
+                        }
+                    }
                     Text(tour.description)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -214,20 +255,39 @@ struct TourView: View {
                 }
                 .padding()
 
-                // Mini map
+                // Mini map with walking routes
                 Map(initialPosition: .region(regionForTour(tour))) {
                     ForEach(tour.stops) { stop in
                         Annotation(stop.name, coordinate: stop.coordinate) {
                             TourStopMarker(stop: stop, isActive: false)
                         }
                     }
-                    MapPolyline(coordinates: tour.stops.map { $0.coordinate })
-                        .stroke(.blue, lineWidth: 3)
+                    // Show walking routes if available, otherwise straight line
+                    if !tourViewModel.walkingRouteSegments.isEmpty {
+                        ForEach(Array(tourViewModel.walkingRouteSegments.enumerated()), id: \.offset) { _, segment in
+                            MapPolyline(coordinates: segment)
+                                .stroke(.blue, lineWidth: 3)
+                        }
+                    } else {
+                        MapPolyline(coordinates: tour.stops.map { $0.coordinate })
+                            .stroke(.blue, lineWidth: 3)
+                    }
                 }
                 .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
                 .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
+
+                if tourViewModel.isCalculatingRoutes {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Calculating walking routes...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                }
 
                 // Stops list
                 VStack(alignment: .leading, spacing: 12) {
@@ -236,31 +296,82 @@ struct TourView: View {
                         .padding(.horizontal)
 
                     ForEach(Array(tour.stops.enumerated()), id: \.element.id) { index, stop in
-                        TourStopCard(stop: stop, index: index, isActive: false, isCompleted: false)
-                            .padding(.horizontal)
+                        VStack(spacing: 0) {
+                            TourStopCard(stop: stop, index: index, isActive: false, isCompleted: false)
+
+                            // Walking ETA between stops
+                            if index < tourViewModel.walkingETAs.count {
+                                let eta = tourViewModel.walkingETAs[index]
+                                if eta > 0 {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "figure.walk")
+                                            .font(.caption2)
+                                        Text("\(Int(eta / 60)) min walk")
+                                            .font(.caption2)
+                                    }
+                                    .foregroundStyle(.secondary)
+                                    .padding(.leading, 44)
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
                     }
                 }
 
                 // Action buttons
-                HStack(spacing: 12) {
-                    Button {
-                        tourViewModel.currentTour = nil
-                    } label: {
-                        Text("Discard")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        tourViewModel.startTour()
-                        if let stops = tourViewModel.currentTour?.stops {
-                            locationManager.startMonitoringTourStops(stops)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        Button {
+                            tourViewModel.currentTour = nil
+                            speechService.stop()
+                        } label: {
+                            Text("Discard")
+                                .frame(maxWidth: .infinity)
                         }
-                    } label: {
-                        Label("Start Tour", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            tourViewModel.startTour()
+                            if let stops = tourViewModel.currentTour?.stops {
+                                locationManager.startMonitoringTourStops(stops)
+                            }
+                            // Auto-narrate first stop
+                            if let firstStop = tourViewModel.currentStop {
+                                speechService.speakStopDescription(firstStop)
+                            }
+                        } label: {
+                            Label("Start Tour", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
+
+                    // Regenerate and Save
+                    HStack(spacing: 12) {
+                        Button {
+                            speechService.stop()
+                            Task { await tourViewModel.regenerateTour() }
+                        } label: {
+                            Label("Try Different Tour", systemImage: "arrow.triangle.2.circlepath")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.orange)
+
+                        Button {
+                            tourStorageService.saveTour(tour)
+                        } label: {
+                            Label(
+                                tourStorageService.savedTours.contains(where: { $0.id == tour.id }) ? "Saved" : "Save Tour",
+                                systemImage: tourStorageService.savedTours.contains(where: { $0.id == tour.id }) ? "checkmark" : "square.and.arrow.down"
+                            )
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.green)
+                        .disabled(tourStorageService.savedTours.contains(where: { $0.id == tour.id }))
+                    }
                 }
                 .padding()
             }
@@ -271,7 +382,7 @@ struct TourView: View {
 
     private func activeTourView(tour: Tour) -> some View {
         VStack(spacing: 0) {
-            // Map section
+            // Map section with walking routes
             Map(position: $cameraPosition) {
                 UserAnnotation()
 
@@ -284,8 +395,17 @@ struct TourView: View {
                     }
                 }
 
-                MapPolyline(coordinates: tour.stops.map { $0.coordinate })
-                    .stroke(.blue, lineWidth: 3)
+                // Walking route polylines
+                if !tourViewModel.walkingRouteSegments.isEmpty {
+                    ForEach(Array(tourViewModel.walkingRouteSegments.enumerated()), id: \.offset) { index, segment in
+                        let isWalked = index < tourViewModel.currentStopIndex
+                        MapPolyline(coordinates: segment)
+                            .stroke(isWalked ? .gray : .blue, lineWidth: 3)
+                    }
+                } else {
+                    MapPolyline(coordinates: tour.stops.map { $0.coordinate })
+                        .stroke(.blue, lineWidth: 3)
+                }
             }
             .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
             .mapControls {
@@ -294,7 +414,6 @@ struct TourView: View {
             }
             .frame(height: 300)
             .onAppear {
-                // Center on the first stop when the active tour view appears
                 if let firstStop = tour.stops.first {
                     cameraPosition = .region(MKCoordinateRegion(
                         center: firstStop.coordinate,
@@ -316,6 +435,11 @@ struct TourView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
+                            if let eta = tourViewModel.walkingETAToNextStop {
+                                Label(eta, systemImage: "figure.walk")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.blue)
+                            }
                             if let location = locationManager.currentLocation,
                                let distance = tourViewModel.distanceToCurrentStop(from: location) {
                                 Text(distance)
@@ -324,8 +448,23 @@ struct TourView: View {
                             }
                         }
 
-                        Text(stop.name)
-                            .font(.title3.bold())
+                        HStack {
+                            Text(stop.name)
+                                .font(.title3.bold())
+                            Spacer()
+                            // Voice narration button
+                            Button {
+                                if speechService.isSpeaking {
+                                    speechService.stop()
+                                } else {
+                                    speechService.speakStopDescription(stop)
+                                }
+                            } label: {
+                                Image(systemName: speechService.isSpeaking ? "stop.circle.fill" : "speaker.wave.2.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(speechService.isSpeaking ? .red : .accent)
+                            }
+                        }
 
                         Text(stop.description)
                             .font(.subheadline)
@@ -390,6 +529,7 @@ struct TourView: View {
                                 tourViewModel.goToPreviousStop()
                                 if let prev = tourViewModel.currentStop {
                                     focusOnStop(prev)
+                                    speechService.speakStopDescription(prev)
                                 }
                             } label: {
                                 Image(systemName: "chevron.left")
@@ -410,6 +550,7 @@ struct TourView: View {
                                 tourViewModel.advanceToNextStop()
                                 if let next = tourViewModel.currentStop {
                                     focusOnStop(next)
+                                    speechService.speakStopDescription(next)
                                 }
                             } label: {
                                 HStack {
@@ -421,7 +562,7 @@ struct TourView: View {
                             .buttonStyle(.borderedProminent)
                         }
 
-                        // Show all stops on map
+                        // Show full route
                         Button {
                             withAnimation(.easeInOut(duration: 0.5)) {
                                 cameraPosition = .region(regionForTour(tour))
@@ -433,7 +574,7 @@ struct TourView: View {
                         .buttonStyle(.bordered)
                         .tint(.secondary)
 
-                        // End tour button
+                        // End tour
                         Button(role: .destructive) {
                             showEndTourConfirmation = true
                         } label: {
@@ -446,13 +587,22 @@ struct TourView: View {
                             isPresented: $showEndTourConfirmation,
                             titleVisibility: .visible
                         ) {
-                            Button("End Tour", role: .destructive) {
+                            Button("End Tour & Rate", role: .destructive) {
+                                speechService.stop()
                                 locationManager.stopMonitoringAllRegions()
+                                tourStorageService.saveTour(tour)
+                                showRating = true
+                                tourViewModel.endTour()
+                            }
+                            Button("End Tour", role: .destructive) {
+                                speechService.stop()
+                                locationManager.stopMonitoringAllRegions()
+                                tourStorageService.saveTour(tour)
                                 tourViewModel.endTour()
                             }
                             Button("Cancel", role: .cancel) {}
                         } message: {
-                            Text("Your progress will be saved to tour history.")
+                            Text("Your tour will be saved automatically.")
                         }
                     }
                     .padding()
@@ -467,6 +617,11 @@ struct TourView: View {
         .onChange(of: locationManager.enteredRegionId) { _, regionId in
             if let id = regionId {
                 tourViewModel.handleRegionEntry(regionId: id)
+            }
+        }
+        .onChange(of: tourViewModel.arrivedAtStop) { _, arrived in
+            if arrived, let stop = tourViewModel.currentStop {
+                speechService.speak("You've arrived at \(stop.name).")
             }
         }
         .sheet(isPresented: $showStopChat) {
@@ -550,13 +705,105 @@ struct TourView: View {
     }
 }
 
-// MARK: - Guide Chat Sheet (general questions while on tour)
+// MARK: - Tour Rating Sheet
+
+struct TourRatingSheet: View {
+    let tour: Tour
+    let tourViewModel: TourViewModel
+    let storageService: TourStorageService
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var rating: Int = 0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+
+                Image(systemName: "star.circle.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.orange)
+
+                Text("How was your tour?")
+                    .font(.title2.bold())
+
+                Text(tour.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                // Star rating
+                HStack(spacing: 12) {
+                    ForEach(1...5, id: \.self) { star in
+                        Button {
+                            withAnimation(.spring(duration: 0.2)) {
+                                rating = star
+                            }
+                        } label: {
+                            Image(systemName: star <= rating ? "star.fill" : "star")
+                                .font(.system(size: 36))
+                                .foregroundStyle(star <= rating ? .orange : .secondary)
+                        }
+                    }
+                }
+                .padding(.vertical)
+
+                if rating > 0 {
+                    Text(ratingLabel)
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    if rating > 0 {
+                        var ratedTour = tour
+                        ratedTour.rating = rating
+                        storageService.saveTour(ratedTour)
+                    }
+                    dismiss()
+                } label: {
+                    Text(rating > 0 ? "Submit Rating" : "Skip")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(rating > 0 ? .orange : .secondary)
+                .padding(.horizontal)
+                .padding(.bottom)
+            }
+            .navigationTitle("Rate Tour")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var ratingLabel: String {
+        switch rating {
+        case 1: return "Not great"
+        case 2: return "Could be better"
+        case 3: return "It was okay"
+        case 4: return "Really enjoyed it!"
+        case 5: return "Amazing tour!"
+        default: return ""
+        }
+    }
+}
+
+// MARK: - Guide Chat Sheet
 
 struct GuideChatSheet: View {
     let tour: Tour
     let locationManager: LocationManager
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var speechService: SpeechService
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
     @State private var isTyping: Bool = false
@@ -565,7 +812,6 @@ struct GuideChatSheet: View {
     private let claudeAPI = ClaudeAPIService()
     private let tourGuideService = TourGuideService()
 
-    /// Use the tour's location name, falling back to GPS-based description
     private var tourLocationDescription: String {
         if tour.locationName != "the area" {
             return tour.locationName
@@ -587,7 +833,6 @@ struct GuideChatSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Context header
                 HStack(spacing: 10) {
                     Image(systemName: "globe.americas.fill")
                         .foregroundStyle(.blue)
@@ -610,7 +855,6 @@ struct GuideChatSheet: View {
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground))
 
-                // Messages
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -629,7 +873,6 @@ struct GuideChatSheet: View {
                     }
                 }
 
-                // Quick questions
                 if messages.count <= 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -651,7 +894,6 @@ struct GuideChatSheet: View {
                     }
                 }
 
-                // Input
                 HStack(spacing: 12) {
                     TextField("Ask anything about the area...", text: $inputText, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -677,7 +919,10 @@ struct GuideChatSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        speechService.stop()
+                        dismiss()
+                    }
                 }
             }
         }
@@ -700,12 +945,7 @@ struct GuideChatSheet: View {
 
         Task {
             let response: String
-
-            // Use tour's location for context, not the user's GPS
-            let tourLocation = CLLocation(
-                latitude: tour.centerLatitude,
-                longitude: tour.centerLongitude
-            )
+            let tourLocation = CLLocation(latitude: tour.centerLatitude, longitude: tour.centerLongitude)
 
             if APIKeyManager.shared.hasAPIKey {
                 let context = tourGuideService.buildLocationContext(
@@ -714,7 +954,6 @@ struct GuideChatSheet: View {
                     nearbyPOIs: [],
                     currentTour: tour
                 )
-                // Enrich the question with the tour's city so Claude knows the correct location
                 let enrichedQuestion = "I'm on a tour in \(tour.locationName). \(text)"
                 response = await claudeAPI.ask(
                     question: enrichedQuestion,
@@ -737,7 +976,7 @@ struct GuideChatSheet: View {
     }
 }
 
-// MARK: - Stop Chat Sheet (questions about current stop)
+// MARK: - Stop Chat Sheet
 
 struct StopChatSheet: View {
     let stop: TourStop
@@ -745,6 +984,7 @@ struct StopChatSheet: View {
     let locationManager: LocationManager
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var speechService: SpeechService
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
     @State private var isTyping: Bool = false
@@ -765,7 +1005,6 @@ struct StopChatSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Stop context header
                 HStack(spacing: 10) {
                     Image(systemName: stop.imageSystemName)
                         .foregroundStyle(.accent)
@@ -782,7 +1021,6 @@ struct StopChatSheet: View {
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground))
 
-                // Messages
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -801,7 +1039,6 @@ struct StopChatSheet: View {
                     }
                 }
 
-                // Quick questions (shown when chat is fresh)
                 if messages.count <= 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -823,7 +1060,6 @@ struct StopChatSheet: View {
                     }
                 }
 
-                // Input
                 HStack(spacing: 12) {
                     TextField("Ask about \(stop.name)...", text: $inputText, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -849,7 +1085,10 @@ struct StopChatSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        speechService.stop()
+                        dismiss()
+                    }
                 }
             }
         }
@@ -871,12 +1110,7 @@ struct StopChatSheet: View {
 
         Task {
             let response: String
-
-            // Use the stop's coordinate for context, not GPS
-            let stopLocation = CLLocation(
-                latitude: stop.latitude,
-                longitude: stop.longitude
-            )
+            let stopLocation = CLLocation(latitude: stop.latitude, longitude: stop.longitude)
 
             if APIKeyManager.shared.hasAPIKey {
                 let context = tourGuideService.buildLocationContext(
@@ -885,7 +1119,6 @@ struct StopChatSheet: View {
                     nearbyPOIs: [],
                     currentTour: tour
                 )
-                // Prepend stop context so Claude knows which stop and city we're in
                 let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
                 response = await claudeAPI.ask(
                     question: enrichedQuestion,
@@ -945,9 +1178,23 @@ struct TourHistoryRow: View {
             VStack(alignment: .leading) {
                 Text(tour.name)
                     .font(.subheadline.bold())
-                Text("\(tour.stops.count) stops - \(tour.formattedDistance)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("\(tour.stops.count) stops")
+                    Text("-")
+                    Text(tour.formattedDistance)
+                    if let rating = tour.rating {
+                        Text("-")
+                        HStack(spacing: 1) {
+                            ForEach(1...5, id: \.self) { star in
+                                Image(systemName: star <= rating ? "star.fill" : "star")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
             Text(tour.createdAt, style: .relative)

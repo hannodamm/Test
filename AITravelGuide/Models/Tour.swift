@@ -13,6 +13,7 @@ struct Tour: Identifiable, Codable {
     var centerLatitude: Double
     var centerLongitude: Double
     var locationName: String
+    var rating: Int? // 1-5 stars, nil = unrated
 
     var centerCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: centerLatitude, longitude: centerLongitude)
@@ -27,7 +28,8 @@ struct Tour: Identifiable, Codable {
         distanceMeters: Double,
         category: TourCategory,
         centerCoordinate: CLLocationCoordinate2D,
-        locationName: String = "the area"
+        locationName: String = "the area",
+        rating: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -40,6 +42,25 @@ struct Tour: Identifiable, Codable {
         self.centerLatitude = centerCoordinate.latitude
         self.centerLongitude = centerCoordinate.longitude
         self.locationName = locationName
+        self.rating = rating
+    }
+
+    // Custom decoding for backwards compatibility with tours saved before
+    // locationName and rating fields were added
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        stops = try container.decode([TourStop].self, forKey: .stops)
+        estimatedDurationMinutes = try container.decode(Int.self, forKey: .estimatedDurationMinutes)
+        distanceMeters = try container.decode(Double.self, forKey: .distanceMeters)
+        category = try container.decode(TourCategory.self, forKey: .category)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        centerLatitude = try container.decode(Double.self, forKey: .centerLatitude)
+        centerLongitude = try container.decode(Double.self, forKey: .centerLongitude)
+        locationName = try container.decodeIfPresent(String.self, forKey: .locationName) ?? "the area"
+        rating = try container.decodeIfPresent(Int.self, forKey: .rating)
     }
 
     var formattedDuration: String {

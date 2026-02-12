@@ -11,6 +11,7 @@ final class ClaudeAPIService: ObservableObject {
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
     private let model = "claude-sonnet-4-5-20250929"
     private let maxTokens = 1024
+    private let requestTimeout: TimeInterval = 15
 
     // MARK: - Public API
 
@@ -111,7 +112,7 @@ final class ClaudeAPIService: ObservableObject {
         system: String,
         messages: [APIMessage]
     ) async throws -> String {
-        var request = URLRequest(url: apiURL)
+        var request = URLRequest(url: apiURL, timeoutInterval: requestTimeout)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")

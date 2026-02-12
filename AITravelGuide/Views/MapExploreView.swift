@@ -25,6 +25,10 @@ struct MapExploreView: View {
             if viewModel.isLoading {
                 loadingOverlay
             }
+
+            if viewModel.searchHadNoResults && !viewModel.isLoading {
+                noResultsOverlay
+            }
         }
         .sheet(item: $selectedMapItem) { poi in
             POIDetailSheet(poi: poi, locationManager: locationManager)
@@ -162,6 +166,21 @@ struct MapExploreView: View {
     }
 
     // MARK: - Loading
+
+    private var noResultsOverlay: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                Text("No results found for \"\(viewModel.searchText)\"")
+                    .font(.subheadline)
+            }
+            .foregroundStyle(.secondary)
+            .padding()
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.bottom, 100)
+        }
+    }
 
     private var loadingOverlay: some View {
         VStack {

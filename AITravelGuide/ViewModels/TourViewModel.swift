@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 import Combine
 
 @MainActor
@@ -13,7 +14,16 @@ final class TourViewModel: ObservableObject {
     @Published var showStopDetail: Bool = false
     @Published var arrivedAtStop: Bool = false
 
+    // Walking directions between stops
+    @Published var walkingRouteSegments: [[CLLocationCoordinate2D]] = []
+    @Published var walkingETAs: [TimeInterval] = []
+    @Published var isCalculatingRoutes: Bool = false
+
     private let tourGuideService = TourGuideService()
+
+    // Track last generation parameters for regeneration
+    private var lastCoordinate: CLLocationCoordinate2D?
+    private var lastPlacemark: CLPlacemark?
 
     var currentStop: TourStop? {
         guard let tour = currentTour,
@@ -38,11 +48,24 @@ final class TourViewModel: ObservableObject {
         return max(0, tour.stops.count - currentStopIndex - 1)
     }
 
+    /// Formatted walking ETA to next stop
+    var walkingETAToNextStop: String? {
+        guard currentStopIndex < walkingETAs.count else { return nil }
+        let seconds = walkingETAs[currentStopIndex]
+        guard seconds > 0 else { return nil }
+        let minutes = Int(seconds / 60)
+        return minutes <= 1 ? "1 min walk" : "\(minutes) min walk"
+    }
+
+    // MARK: - Tour Generation
+
     func generateTour(
         coordinate: CLLocationCoordinate2D,
         placemark: CLPlacemark?
     ) async {
         isGenerating = true
+        lastCoordinate = coordinate
+        lastPlacemark = placemark
 
         let tour = await tourGuideService.generateTour(
             near: coordinate,
@@ -53,9 +76,18 @@ final class TourViewModel: ObservableObject {
         if let tour {
             currentTour = tour
             currentStopIndex = 0
+            await calculateWalkingRoutes()
         }
         isGenerating = false
     }
+
+    /// Generate a different tour with the same location and category
+    func regenerateTour() async {
+        guard let coord = lastCoordinate else { return }
+        await generateTour(coordinate: coord, placemark: lastPlacemark)
+    }
+
+    // MARK: - Tour Lifecycle
 
     func startTour() {
         guard currentTour != nil else { return }
@@ -72,6 +104,8 @@ final class TourViewModel: ObservableObject {
         currentTour = nil
         currentStopIndex = 0
         arrivedAtStop = false
+        walkingRouteSegments = []
+        walkingETAs = []
     }
 
     func advanceToNextStop() {
@@ -80,7 +114,6 @@ final class TourViewModel: ObservableObject {
             currentStopIndex += 1
             arrivedAtStop = false
         } else {
-            // Tour complete
             endTour()
         }
     }
@@ -99,6 +132,20 @@ final class TourViewModel: ObservableObject {
         arrivedAtStop = false
         showStopDetail = true
     }
+
+    // MARK: - Rating
+
+    func rateTour(_ stars: Int) {
+        guard stars >= 1, stars <= 5 else { return }
+        currentTour?.rating = stars
+        // Also update in history
+        if let tour = currentTour,
+           let idx = tourHistory.firstIndex(where: { $0.id == tour.id }) {
+            tourHistory[idx].rating = stars
+        }
+    }
+
+    // MARK: - Proximity
 
     func checkProximityToCurrentStop(userLocation: CLLocation, threshold: CLLocationDistance = 50) {
         guard let stop = currentStop else { return }
@@ -124,5 +171,55 @@ final class TourViewModel: ObservableObject {
             return String(format: "%.0f m away", distance)
         }
         return String(format: "%.1f km away", distance / 1000)
+    }
+
+    // MARK: - Walking Directions
+
+    func calculateWalkingRoutes() async {
+        guard let tour = currentTour, tour.stops.count >= 2 else {
+            walkingRouteSegments = []
+            walkingETAs = []
+            return
+        }
+
+        isCalculatingRoutes = true
+        var segments: [[CLLocationCoordinate2D]] = []
+        var etas: [TimeInterval] = []
+
+        for i in 0..<(tour.stops.count - 1) {
+            let source = tour.stops[i]
+            let destination = tour.stops[i + 1]
+
+            let request = MKDirections.Request()
+            request.source = MKMapItem(placemark: MKPlacemark(coordinate: source.coordinate))
+            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination.coordinate))
+            request.transportType = .walking
+
+            let directions = MKDirections(request: request)
+            do {
+                let response = try await directions.calculate()
+                if let route = response.routes.first {
+                    let count = route.polyline.pointCount
+                    var coords = [CLLocationCoordinate2D](
+                        repeating: CLLocationCoordinate2D(),
+                        count: count
+                    )
+                    route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
+                    segments.append(coords)
+                    etas.append(route.expectedTravelTime)
+                } else {
+                    segments.append([source.coordinate, destination.coordinate])
+                    etas.append(0)
+                }
+            } catch {
+                // Fallback to straight line
+                segments.append([source.coordinate, destination.coordinate])
+                etas.append(0)
+            }
+        }
+
+        walkingRouteSegments = segments
+        walkingETAs = etas
+        isCalculatingRoutes = false
     }
 }

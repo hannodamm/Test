@@ -351,7 +351,7 @@ final class TourGuideService: ObservableObject {
         messages: [APIMessage]
     ) async throws -> String {
         let url = URL(string: "https://api.anthropic.com/v1/messages")!
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 15)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")

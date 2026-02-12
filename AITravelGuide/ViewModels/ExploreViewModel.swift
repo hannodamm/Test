@@ -17,6 +17,7 @@ final class ExploreViewModel: ObservableObject {
     @Published var searchResultRegion: MKCoordinateRegion?
     @Published var searchedCoordinate: CLLocationCoordinate2D?
     @Published var searchedLocationName: String?
+    @Published var searchHadNoResults: Bool = false
 
     private let mapSearchService = MapSearchService()
     private var lastSearchCoordinate: CLLocationCoordinate2D?
@@ -84,6 +85,7 @@ final class ExploreViewModel: ObservableObject {
             radius: searchRadius
         )
         nearbyPOIs = results
+        searchHadNoResults = results.isEmpty
 
         // Move the camera to show search results
         if !results.isEmpty {
