@@ -10,6 +10,8 @@ struct MapExploreView: View {
     @State private var selectedMapItem: PointOfInterest?
     @State private var showCategoryFilter = false
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var currentSpan: Double = 0.05
+    @State private var currentCenter: CLLocationCoordinate2D?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -19,6 +21,45 @@ struct MapExploreView: View {
                 searchBar
                 if showCategoryFilter {
                     categoryFilterBar
+                }
+            }
+
+            // Manual map controls at bottom-trailing to avoid search bar overlap
+            VStack(spacing: 8) {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Button { zoomIn() } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        Button { zoomOut() } label: {
+                            Image(systemName: "minus")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                cameraPosition = .userLocation(fallback: .automatic)
+                            }
+                        } label: {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.blue)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 24)
                 }
             }
 
@@ -85,9 +126,11 @@ struct MapExploreView: View {
         }
         .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
         .mapControls {
-            MapUserLocationButton()
-            MapCompass()
             MapScaleView()
+        }
+        .onMapCameraChange { context in
+            currentSpan = context.region.span.latitudeDelta
+            currentCenter = context.region.center
         }
         .ignoresSafeArea(edges: .bottom)
     }
@@ -179,6 +222,30 @@ struct MapExploreView: View {
             .padding()
             .background(.ultraThinMaterial, in: Capsule())
             .padding(.bottom, 100)
+        }
+    }
+
+    // MARK: - Zoom Helpers
+
+    private func zoomIn() {
+        let center = currentCenter ?? locationManager.currentLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        let newSpan = max(currentSpan / 2, 0.001)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: newSpan, longitudeDelta: newSpan)
+            ))
+        }
+    }
+
+    private func zoomOut() {
+        let center = currentCenter ?? locationManager.currentLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        let newSpan = min(currentSpan * 2, 180.0)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: newSpan, longitudeDelta: newSpan)
+            ))
         }
     }
 

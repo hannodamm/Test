@@ -27,6 +27,15 @@ final class TourViewModel: ObservableObject {
     @Published var showStopDetail: Bool = false
     @Published var arrivedAtStop: Bool = false
 
+    // Discovery points
+    @Published var nearbyDiscoveryPoint: DiscoveryPoint?
+    private var discoveredPointIds: Set<UUID> = []
+
+    // Progress commentary
+    @Published var progressCommentary: String?
+    private var hasShownHalfway = false
+    private var hasShownAlmostDone = false
+
     // Walking directions between stops
     @Published var walkingRouteSegments: [[CLLocationCoordinate2D]] = []
     @Published var walkingETAs: [TimeInterval] = []
@@ -128,6 +137,11 @@ final class TourViewModel: ObservableObject {
         isOnTour = true
         currentStopIndex = 0
         arrivedAtStop = false
+        discoveredPointIds = []
+        nearbyDiscoveryPoint = nil
+        progressCommentary = nil
+        hasShownHalfway = false
+        hasShownAlmostDone = false
     }
 
     func endTour() {
@@ -273,5 +287,54 @@ final class TourViewModel: ObservableObject {
         walkingSteps = allSteps
         walkingDistances = distances
         isCalculatingRoutes = false
+    }
+
+    // MARK: - Discovery Points
+
+    func checkProximityToDiscoveryPoints(userLocation: CLLocation) {
+        guard let tour = currentTour else { return }
+
+        // Gather discovery points from current and next stop
+        var candidates: [DiscoveryPoint] = []
+        if let current = currentStop {
+            candidates.append(contentsOf: current.discoveryPoints ?? [])
+        }
+        if let next = nextStop {
+            candidates.append(contentsOf: next.discoveryPoints ?? [])
+        }
+
+        for point in candidates {
+            guard !discoveredPointIds.contains(point.id) else { continue }
+            let pointLocation = CLLocation(latitude: point.latitude, longitude: point.longitude)
+            if userLocation.distance(from: pointLocation) <= point.triggerRadiusMeters {
+                discoveredPointIds.insert(point.id)
+                nearbyDiscoveryPoint = point
+                return
+            }
+        }
+    }
+
+    // MARK: - Progress Commentary
+
+    func checkProgressCommentary() {
+        guard let tour = currentTour, tour.stops.count >= 3 else { return }
+
+        let progress = Double(currentStopIndex) / Double(tour.stops.count)
+
+        if !hasShownHalfway && progress >= 0.45 && progress < 0.75 {
+            hasShownHalfway = true
+            if let thread = tour.narrativeThread {
+                progressCommentary = "We're halfway through! \(thread)"
+            } else {
+                progressCommentary = "We're halfway through the tour — doing great!"
+            }
+        } else if !hasShownAlmostDone && currentStopIndex == tour.stops.count - 2 {
+            hasShownAlmostDone = true
+            if let thread = tour.narrativeThread {
+                progressCommentary = "Almost done! \(thread)"
+            } else {
+                progressCommentary = "Just one more stop to go — almost done!"
+            }
+        }
     }
 }

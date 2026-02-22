@@ -19,7 +19,8 @@ final class ClaudeAPIService: ObservableObject {
     func ask(
         question: String,
         conversationHistory: [ChatMessage],
-        locationContext: LocationContext
+        locationContext: LocationContext,
+        guidePersona: GuidePersona? = nil
     ) async -> String {
         guard let apiKey = APIKeyManager.shared.claudeAPIKey, !apiKey.isEmpty else {
             return "Please add your Claude API key in Settings to enable AI-powered responses."
@@ -29,7 +30,7 @@ final class ClaudeAPIService: ObservableObject {
         lastError = nil
         defer { isLoading = false }
 
-        let systemPrompt = buildSystemPrompt(context: locationContext)
+        let systemPrompt = buildSystemPrompt(context: locationContext, persona: guidePersona)
         let messages = buildMessages(history: conversationHistory, newQuestion: question)
 
         do {
@@ -43,27 +44,37 @@ final class ClaudeAPIService: ObservableObject {
     /// Generate a rich narration for a specific tour stop.
     func narrateStop(
         stop: TourStop,
-        locationContext: LocationContext
+        locationContext: LocationContext,
+        guidePersona: GuidePersona? = nil
     ) async -> String? {
         guard let apiKey = APIKeyManager.shared.claudeAPIKey, !apiKey.isEmpty else {
             return nil
         }
 
-        let system = """
-            You are an expert travel guide narrating a walking tour. Give a vivid, \
-            engaging 2-3 paragraph description of this stop. Include historical context, \
-            cultural significance, and practical tips. Be conversational and enthusiastic.
-            """
+        var systemParts: [String] = []
+        if let persona = guidePersona {
+            systemParts.append("You are \(persona.name), a travel guide with this style: \(persona.voiceStyle).")
+            systemParts.append("Speak in character — match that voice and energy.")
+        } else {
+            systemParts.append("You are an expert travel guide narrating a walking tour.")
+        }
+        systemParts.append("Write as if speaking aloud to someone standing right here: use natural pauses, conversational tone, and vivid details.")
+        systemParts.append("Keep it under 150 words. Do not use markdown, bullet points, or headings — just flowing spoken text.")
 
-        let userContent = """
-            Narrate this tour stop for a visitor:
-            Name: \(stop.name)
-            Description: \(stop.description)
-            Location: \(locationContext.city ?? "Unknown"), \(locationContext.country ?? "Unknown")
-            Neighborhood: \(locationContext.neighborhood ?? "N/A")
-            \(stop.historicalNote.map { "Historical note: \($0)" } ?? "")
-            \(stop.tips.map { "Tip: \($0)" } ?? "")
-            """
+        let system = systemParts.joined(separator: " ")
+
+        var userParts: [String] = [
+            "Narrate this tour stop for a visitor:",
+            "Name: \(stop.name)",
+            "Description: \(stop.description)",
+            "Location: \(locationContext.city ?? "Unknown"), \(locationContext.country ?? "Unknown")",
+            "Neighborhood: \(locationContext.neighborhood ?? "N/A")"
+        ]
+        if let note = stop.historicalNote { userParts.append("Historical note: \(note)") }
+        if let tip = stop.tips { userParts.append("Tip: \(tip)") }
+        if let narration = stop.walkingNarration { userParts.append("Walking narration context: \(narration)") }
+
+        let userContent = userParts.joined(separator: "\n")
 
         let messages = [APIMessage(role: "user", content: userContent)]
 
@@ -151,13 +162,17 @@ final class ClaudeAPIService: ObservableObject {
 
     // MARK: - Prompt Construction
 
-    private func buildSystemPrompt(context: LocationContext) -> String {
-        var parts: [String] = [
-            "You are an expert AI travel guide helping a user explore their surroundings in real time.",
-            "Be friendly, concise, and knowledgeable. Provide specific, actionable advice.",
-            "When you don't know something specific about a place, say so honestly rather than guessing.",
-            ""
-        ]
+    private func buildSystemPrompt(context: LocationContext, persona: GuidePersona? = nil) -> String {
+        var parts: [String] = []
+
+        if let persona {
+            parts.append("You are \(persona.name), \(persona.tagline). Your style: \(persona.voiceStyle). Stay in character.")
+        } else {
+            parts.append("You are an expert AI travel guide helping a user explore their surroundings in real time.")
+        }
+        parts.append("Be friendly, concise, and knowledgeable. Provide specific, actionable advice.")
+        parts.append("When you don't know something specific about a place, say so honestly rather than guessing.")
+        parts.append("")
 
         parts.append("CURRENT LOCATION CONTEXT:")
         if let city = context.city { parts.append("- City: \(city)") }

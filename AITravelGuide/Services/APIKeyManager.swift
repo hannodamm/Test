@@ -24,6 +24,23 @@ final class APIKeyManager {
         claudeAPIKey != nil && !(claudeAPIKey?.isEmpty ?? true)
     }
 
+    // MARK: - OpenAI API Key
+
+    var openAIAPIKey: String? {
+        get { read(account: "openai-api-key") }
+        set {
+            if let value = newValue {
+                save(account: "openai-api-key", value: value)
+            } else {
+                delete(account: "openai-api-key")
+            }
+        }
+    }
+
+    var hasOpenAIKey: Bool {
+        openAIAPIKey != nil && !(openAIAPIKey?.isEmpty ?? true)
+    }
+
     // MARK: - Keychain Operations
 
     private func save(account: String, value: String) {

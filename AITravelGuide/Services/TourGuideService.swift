@@ -28,6 +28,18 @@ final class TourGuideService: ObservableObject {
             }
         }
 
+        // Route curated categories to template-based generation
+        if category.isCurated {
+            if let tour = await generateCuratedTour(
+                coordinate: coordinate,
+                locationName: locationName,
+                category: category
+            ) {
+                self.currentTour = tour
+                return tour
+            }
+        }
+
         // AI-first approach: Ask Claude to design the tour, then geocode the stops
         if APIKeyManager.shared.hasAPIKey {
             if let tour = await generateAIDesignedTour(
@@ -48,6 +60,219 @@ final class TourGuideService: ObservableObject {
             category: category,
             numberOfStops: numberOfStops
         )
+    }
+
+    // MARK: - Curated Tour Generation (Template-based)
+
+    private func generateCuratedTour(
+        coordinate: CLLocationCoordinate2D,
+        locationName: String,
+        category: TourCategory
+    ) async -> Tour? {
+        guard let template = MilanTourTemplates.template(for: category)
+            ?? MunichTourTemplates.template(for: category) else { return nil }
+
+        // Geocode all stops
+        var tourStops: [TourStop] = []
+        for (index, templateStop) in template.stops.enumerated() {
+            let resolvedCoord = await geocodeStop(
+                query: templateStop.searchQuery,
+                near: coordinate
+            ) ?? coordinate
+
+            // Geocode discovery points
+            var discoveryPoints: [DiscoveryPoint] = []
+            for dp in templateStop.discoveryPoints {
+                let dpCoord = await geocodeStop(
+                    query: dp.searchQuery,
+                    near: resolvedCoord
+                ) ?? resolvedCoord
+
+                discoveryPoints.append(DiscoveryPoint(
+                    name: dp.name,
+                    description: dp.description,
+                    coordinate: dpCoord,
+                    iconSystemName: dp.iconSystemName
+                ))
+            }
+
+            tourStops.append(TourStop(
+                name: templateStop.name,
+                description: templateStop.description,
+                coordinate: resolvedCoord,
+                orderIndex: index,
+                durationMinutes: templateStop.durationMinutes,
+                historicalNote: templateStop.historicalNote,
+                tips: templateStop.tip,
+                imageSystemName: iconForType(templateStop.iconType),
+                walkingNarration: templateStop.walkingNarration,
+                discoveryPoints: discoveryPoints.isEmpty ? nil : discoveryPoints
+            ))
+        }
+
+        // Filter out stops that couldn't be geocoded (still at the start coordinate)
+        let validStops = tourStops.filter { stop in
+            let d = CLLocation(latitude: stop.latitude, longitude: stop.longitude)
+                .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+            return d > 10
+        }
+
+        guard !validStops.isEmpty else { return nil }
+
+        // Reindex stops
+        let reindexedStops = validStops.enumerated().map { index, stop in
+            TourStop(
+                name: stop.name,
+                description: stop.description,
+                coordinate: stop.coordinate,
+                orderIndex: index,
+                durationMinutes: stop.durationMinutes,
+                historicalNote: stop.historicalNote,
+                tips: stop.tips,
+                imageSystemName: stop.imageSystemName,
+                walkingNarration: stop.walkingNarration,
+                discoveryPoints: stop.discoveryPoints
+            )
+        }
+
+        // Optionally enrich with Claude if API key available and template is a skeleton
+        var finalStops = reindexedStops
+        if template.isSkeleton, APIKeyManager.shared.hasAPIKey {
+            if let enriched = await enrichStopsWithClaude(
+                stops: reindexedStops,
+                template: template,
+                locationName: locationName
+            ) {
+                finalStops = enriched
+            }
+        }
+
+        let totalDistance = calculateRouteDistance(stops: finalStops, from: coordinate)
+        let walkingMinutes = Int(totalDistance / 80.0)
+        let stopMinutes = finalStops.reduce(0) { $0 + $1.durationMinutes }
+
+        return Tour(
+            name: template.tourName,
+            description: template.tourDescription,
+            stops: finalStops,
+            estimatedDurationMinutes: walkingMinutes + stopMinutes,
+            distanceMeters: totalDistance,
+            category: category,
+            centerCoordinate: coordinate,
+            locationName: locationName,
+            narrativeThread: template.narrativeThread,
+            guidePersona: template.guidePersona,
+            templateId: template.id
+        )
+    }
+
+    // MARK: - Claude Enrichment for Template Tours
+
+    private func enrichStopsWithClaude(
+        stops: [TourStop],
+        template: TourTemplate,
+        locationName: String
+    ) async -> [TourStop]? {
+        guard let apiKey = APIKeyManager.shared.claudeAPIKey, !apiKey.isEmpty else { return nil }
+
+        let hour = Calendar.current.component(.hour, from: Date())
+        let timeOfDay: String
+        switch hour {
+        case 6..<12: timeOfDay = "morning"
+        case 12..<17: timeOfDay = "afternoon"
+        case 17..<21: timeOfDay = "evening"
+        default: timeOfDay = "night"
+        }
+
+        let stopsList = stops.enumerated().map { index, stop in
+            """
+            Stop \(index + 1): \(stop.name)
+            Description: \(stop.description)
+            Walking narration: \(stop.walkingNarration ?? "none")
+            Historical note: \(stop.historicalNote ?? "none")
+            Tip: \(stop.tips ?? "none")
+            """
+        }.joined(separator: "\n\n")
+
+        let prompt = """
+        You are \(template.guidePersona.name), \(template.guidePersona.tagline). \
+        Your voice style: \(template.guidePersona.voiceStyle).
+
+        Rewrite the descriptions for this \(template.tourName) tour in \(locationName). \
+        It's currently \(timeOfDay). The narrative thread is: \(template.narrativeThread)
+
+        Current stops:
+        \(stopsList)
+
+        Rewrite each stop's description and walking narration IN CHARACTER as \(template.guidePersona.name). \
+        Make them vivid, personal, and time-aware (reference \(timeOfDay) light, atmosphere, etc. where natural). \
+        Keep historical notes factual. Keep tips practical.
+
+        Respond in this EXACT JSON format (no markdown, no code fences):
+        {
+          "stops": [
+            {
+              "description": "rewritten description",
+              "walkingNarration": "rewritten walking narration or null",
+              "historicalNote": "keep or improve historical note or null",
+              "tip": "keep or improve tip or null"
+            }
+          ]
+        }
+        """
+
+        let system = "You are a charismatic tour guide. Respond only with valid JSON."
+        let messages = [APIMessage(role: "user", content: prompt)]
+
+        do {
+            let responseText = try await callClaudeAPI(apiKey: apiKey, system: system, messages: messages)
+
+            var cleaned = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleaned.hasPrefix("```") {
+                cleaned = cleaned.replacingOccurrences(of: "```json", with: "")
+                cleaned = cleaned.replacingOccurrences(of: "```", with: "")
+                cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            guard let data = cleaned.data(using: .utf8) else { return nil }
+
+            struct EnrichedStops: Decodable {
+                let stops: [EnrichedStop]
+            }
+            struct EnrichedStop: Decodable {
+                let description: String?
+                let walkingNarration: String?
+                let historicalNote: String?
+                let tip: String?
+            }
+
+            let enriched = try JSONDecoder().decode(EnrichedStops.self, from: data)
+
+            // Merge enriched content back, keeping coordinates and structure
+            var result: [TourStop] = []
+            for (index, stop) in stops.enumerated() {
+                if index < enriched.stops.count {
+                    let e = enriched.stops[index]
+                    result.append(TourStop(
+                        name: stop.name,
+                        description: e.description ?? stop.description,
+                        coordinate: stop.coordinate,
+                        orderIndex: stop.orderIndex,
+                        durationMinutes: stop.durationMinutes,
+                        historicalNote: e.historicalNote ?? stop.historicalNote,
+                        tips: e.tip ?? stop.tips,
+                        imageSystemName: stop.imageSystemName,
+                        walkingNarration: e.walkingNarration ?? stop.walkingNarration,
+                        discoveryPoints: stop.discoveryPoints
+                    ))
+                } else {
+                    result.append(stop)
+                }
+            }
+            return result
+        } catch {
+            return nil // Fall back to template content
+        }
     }
 
     // MARK: - AI-First Tour Generation
@@ -80,6 +305,14 @@ final class TourGuideService: ObservableObject {
         {
           "tourName": "A creative, evocative tour name specific to this location",
           "tourDescription": "A compelling 1-2 sentence description that makes someone excited to take this tour",
+          "narrativeThread": "A thematic arc connecting all stops — what story does this tour tell?",
+          "guidePersona": {
+            "name": "A local-sounding first name",
+            "tagline": "A short description like 'lifelong local and history buff'",
+            "voiceStyle": "2-3 adjectives describing how this guide speaks",
+            "greeting": "A warm opening line in character",
+            "signoff": "A memorable farewell line in character"
+          },
           "stops": [
             {
               "name": "The actual, real name of this place",
@@ -88,7 +321,15 @@ final class TourGuideService: ObservableObject {
               "historicalNote": "A specific historical fact or story about this place, or null if not relevant",
               "tip": "A practical insider tip (best time to visit, what to look for, where to stand, what to order, etc.)",
               "durationMinutes": 15,
-              "iconType": "landmark"
+              "iconType": "landmark",
+              "walkingNarration": "What to notice and enjoy while walking from the previous stop to this one (null for the first stop)",
+              "discoveryPoints": [
+                {
+                  "name": "Something interesting to notice between stops",
+                  "description": "Look left/right — a brief, vivid description of this discovery",
+                  "searchQuery": "A search query to find this point on a map"
+                }
+              ]
             }
           ]
         }
@@ -101,6 +342,8 @@ final class TourGuideService: ObservableObject {
         - Order stops as a logical walking route, not random
         - Make descriptions vivid and specific to each place, never generic
         - DO NOT just list museums unless this is specifically an Art tour
+        - Include 1-3 discoveryPoints per stop — things to notice on the walk between stops
+        - walkingNarration should be null for the first stop
         """
 
         let system = """
@@ -122,6 +365,21 @@ final class TourGuideService: ObservableObject {
                     near: coordinate
                 ) ?? coordinate
 
+                // Geocode discovery points
+                var discoveryPoints: [DiscoveryPoint] = []
+                for dp in aiStop.discoveryPoints {
+                    let dpCoord = await geocodeStop(
+                        query: dp.searchQuery,
+                        near: resolvedCoord
+                    ) ?? resolvedCoord
+
+                    discoveryPoints.append(DiscoveryPoint(
+                        name: dp.name,
+                        description: dp.description,
+                        coordinate: dpCoord
+                    ))
+                }
+
                 tourStops.append(TourStop(
                     name: aiStop.name,
                     description: aiStop.description,
@@ -130,7 +388,9 @@ final class TourGuideService: ObservableObject {
                     durationMinutes: aiStop.durationMinutes,
                     historicalNote: aiStop.historicalNote,
                     tips: aiStop.tip,
-                    imageSystemName: iconForType(aiStop.iconType)
+                    imageSystemName: iconForType(aiStop.iconType),
+                    walkingNarration: aiStop.walkingNarration,
+                    discoveryPoints: discoveryPoints.isEmpty ? nil : discoveryPoints
                 ))
             }
 
@@ -153,7 +413,9 @@ final class TourGuideService: ObservableObject {
                     durationMinutes: stop.durationMinutes,
                     historicalNote: stop.historicalNote,
                     tips: stop.tips,
-                    imageSystemName: stop.imageSystemName
+                    imageSystemName: stop.imageSystemName,
+                    walkingNarration: stop.walkingNarration,
+                    discoveryPoints: stop.discoveryPoints
                 )
             }
 
@@ -169,7 +431,9 @@ final class TourGuideService: ObservableObject {
                 distanceMeters: totalDistance,
                 category: category,
                 centerCoordinate: coordinate,
-                locationName: locationName
+                locationName: locationName,
+                narrativeThread: aiTour.narrativeThread,
+                guidePersona: aiTour.guidePersona
             )
         } catch {
             return nil
@@ -210,6 +474,8 @@ final class TourGuideService: ObservableObject {
     private struct AIDesignedTour {
         let tourName: String
         let tourDescription: String
+        let narrativeThread: String?
+        let guidePersona: GuidePersona?
         let stops: [AIDesignedStop]
     }
 
@@ -221,6 +487,14 @@ final class TourGuideService: ObservableObject {
         let tip: String?
         let durationMinutes: Int
         let iconType: String
+        let walkingNarration: String?
+        let discoveryPoints: [AIDiscoveryPoint]
+    }
+
+    private struct AIDiscoveryPoint {
+        let name: String
+        let description: String
+        let searchQuery: String
     }
 
     private func parseAIDesignedTour(_ json: String) -> AIDesignedTour? {
@@ -236,7 +510,17 @@ final class TourGuideService: ObservableObject {
         struct TourJSON: Decodable {
             let tourName: String
             let tourDescription: String
+            let narrativeThread: String?
+            let guidePersona: GuidePersonaJSON?
             let stops: [StopJSON]
+        }
+
+        struct GuidePersonaJSON: Decodable {
+            let name: String?
+            let tagline: String?
+            let voiceStyle: String?
+            let greeting: String?
+            let signoff: String?
         }
 
         struct StopJSON: Decodable {
@@ -247,24 +531,59 @@ final class TourGuideService: ObservableObject {
             let tip: String?
             let durationMinutes: Int?
             let iconType: String?
+            let walkingNarration: String?
+            let discoveryPoints: [DiscoveryPointJSON]?
+        }
+
+        struct DiscoveryPointJSON: Decodable {
+            let name: String
+            let description: String
+            let searchQuery: String?
         }
 
         do {
             let parsed = try JSONDecoder().decode(TourJSON.self, from: data)
+
+            let persona: GuidePersona?
+            if let p = parsed.guidePersona,
+               let name = p.name, !name.isEmpty {
+                persona = GuidePersona(
+                    name: name,
+                    tagline: p.tagline ?? "",
+                    voiceStyle: p.voiceStyle ?? "",
+                    greeting: p.greeting ?? "",
+                    signoff: p.signoff ?? ""
+                )
+            } else {
+                persona = nil
+            }
+
             let stops = parsed.stops.map { stop in
-                AIDesignedStop(
+                let dps = (stop.discoveryPoints ?? []).compactMap { dp -> AIDiscoveryPoint? in
+                    guard let query = dp.searchQuery, !query.isEmpty else { return nil }
+                    return AIDiscoveryPoint(
+                        name: dp.name,
+                        description: dp.description,
+                        searchQuery: query
+                    )
+                }
+                return AIDesignedStop(
                     name: stop.name,
                     searchQuery: stop.searchQuery,
                     description: stop.description,
                     historicalNote: stop.historicalNote,
                     tip: stop.tip,
                     durationMinutes: stop.durationMinutes ?? 10,
-                    iconType: stop.iconType ?? "landmark"
+                    iconType: stop.iconType ?? "landmark",
+                    walkingNarration: stop.walkingNarration,
+                    discoveryPoints: dps
                 )
             }
             return AIDesignedTour(
                 tourName: parsed.tourName,
                 tourDescription: parsed.tourDescription,
+                narrativeThread: parsed.narrativeThread,
+                guidePersona: persona,
                 stops: stops
             )
         } catch {
@@ -366,7 +685,7 @@ final class TourGuideService: ObservableObject {
 
         let body = APIRequest(
             model: "claude-sonnet-4-5-20250929",
-            max_tokens: 2048,
+            max_tokens: 4096,
             system: system,
             messages: messages
         )
@@ -547,6 +866,9 @@ final class TourGuideService: ObservableObject {
             Include a mix: one iconic landmark, one great viewpoint, one cultural spot, one food \
             recommendation, and one hidden gem that most tourists miss. Make it a "best of" tour.
             """
+        default:
+            // Curated categories won't reach here, but provide a fallback
+            return "Pick the best spots for a memorable walking tour in \(locationName)."
         }
     }
 
@@ -568,6 +890,8 @@ final class TourGuideService: ObservableObject {
             return ["bar", "cocktail bar", "nightclub", "live music", "rooftop bar"]
         case .general:
             return ["landmark", "museum", "park", "tourist attraction", "famous"]
+        default:
+            return ["landmark", "tourist attraction", "famous"]
         }
     }
 
@@ -640,6 +964,7 @@ final class TourGuideService: ObservableObject {
         case .art: return "\(location) Art Walk"
         case .nightlife: return "\(location) After Dark"
         case .general: return "Discover \(location)"
+        default: return "Explore \(location)"
         }
     }
 
@@ -662,6 +987,8 @@ final class TourGuideService: ObservableObject {
             return "\(base), enjoying the vibrant evening scene and entertainment."
         case .general:
             return "\(base), taking in the best highlights this area has to offer."
+        default:
+            return "\(base), discovering the best this area has to offer."
         }
     }
 

@@ -32,9 +32,18 @@ struct ChatBubble: View {
                         Button {
                             speechService.toggle(message.content)
                         } label: {
-                            Image(systemName: speechService.isSpeaking ? "stop.circle.fill" : "speaker.wave.2")
+                            Image(systemName: speechService.isSpeaking ? "pause.circle.fill" : speechService.isPaused ? "play.circle.fill" : "speaker.wave.2")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(speechService.isPaused ? .orange : .secondary)
+                        }
+                        if speechService.isSpeaking || speechService.isPaused {
+                            Button {
+                                speechService.stop()
+                            } label: {
+                                Image(systemName: "stop.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
                         }
                     }
                 }

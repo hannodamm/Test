@@ -10,6 +10,12 @@ struct SettingsView: View {
     @State private var showSavedAlert: Bool = false
     @State private var showKeyFormatError: Bool = false
 
+    @State private var openAIKeyInput: String = ""
+    @State private var hasOpenAIKey: Bool = APIKeyManager.shared.hasOpenAIKey
+    @State private var showOpenAIKey: Bool = false
+    @State private var showOpenAISavedAlert: Bool = false
+    @State private var showOpenAIKeyFormatError: Bool = false
+
     @AppStorage("voiceEnabled") private var voiceEnabled = true
     @AppStorage("speechRateIndex") private var speechRateIndex = 1 // 0=slow, 1=normal, 2=fast
 
@@ -22,6 +28,14 @@ struct SettingsView: View {
                     Text("Claude API Key")
                 } footer: {
                     Text("Your API key is stored securely in the iOS Keychain and never leaves your device except to authenticate with the Anthropic API. Get a key at console.anthropic.com.")
+                }
+
+                Section {
+                    openAIKeySection
+                } header: {
+                    Text("OpenAI API Key")
+                } footer: {
+                    Text("Used for natural-sounding voice narration. Get a key at platform.openai.com")
                 }
 
                 Section("Voice Guide") {
@@ -39,18 +53,18 @@ struct SettingsView: View {
                         .pickerStyle(.segmented)
 
                         Button {
-                            if speechService.isSpeaking {
+                            if speechService.isSpeaking || speechService.isPaused {
                                 speechService.stop()
                             } else {
                                 speechService.speak("Hello! I'm your AI travel guide. Let me show you around.")
                             }
                         } label: {
                             Label(
-                                speechService.isSpeaking ? "Stop Preview" : "Preview Voice",
-                                systemImage: speechService.isSpeaking ? "stop.circle.fill" : "play.circle"
+                                speechService.isSpeaking || speechService.isPaused ? "Stop Preview" : "Preview Voice",
+                                systemImage: speechService.isSpeaking || speechService.isPaused ? "stop.circle.fill" : "play.circle"
                             )
                         }
-                        .tint(speechService.isSpeaking ? .red : .accentColor)
+                        .tint(speechService.isSpeaking || speechService.isPaused ? .red : .accentColor)
                     }
                 }
 
@@ -108,6 +122,16 @@ struct SettingsView: View {
                 Button("OK") {}
             } message: {
                 Text("Claude API keys start with \"sk-ant-\". Please check your key and try again.")
+            }
+            .alert("OpenAI Key Saved", isPresented: $showOpenAISavedAlert) {
+                Button("OK") {}
+            } message: {
+                Text("Your OpenAI API key has been saved. Natural voice narration is now enabled.")
+            }
+            .alert("Invalid OpenAI Key", isPresented: $showOpenAIKeyFormatError) {
+                Button("OK") {}
+            } message: {
+                Text("OpenAI API keys start with \"sk-\". Please check your key and try again.")
             }
         }
     }
@@ -173,6 +197,67 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - OpenAI Key Section
+
+    @ViewBuilder
+    private var openAIKeySection: some View {
+        if hasOpenAIKey {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("OpenAI key configured")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Remove", role: .destructive) {
+                    APIKeyManager.shared.openAIAPIKey = nil
+                    hasOpenAIKey = false
+                    openAIKeyInput = ""
+                }
+                .font(.subheadline)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    if showOpenAIKey {
+                        TextField("sk-...", text: $openAIKeyInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(.body, design: .monospaced))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } else {
+                        SecureField("sk-...", text: $openAIKeyInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(.body, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                    }
+                    Button {
+                        showOpenAIKey.toggle()
+                    } label: {
+                        Image(systemName: showOpenAIKey ? "eye.slash" : "eye")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button {
+                    let trimmed = openAIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    guard trimmed.hasPrefix("sk-") else {
+                        showOpenAIKeyFormatError = true
+                        return
+                    }
+                    APIKeyManager.shared.openAIAPIKey = trimmed
+                    hasOpenAIKey = true
+                    showOpenAISavedAlert = true
+                } label: {
+                    Text("Save API Key")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(openAIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
     // MARK: - AI Features Status
 
     private var aiFeaturesStatus: some View {
@@ -180,6 +265,7 @@ struct SettingsView: View {
             featureRow("AI Chat Responses", enabled: hasKey)
             featureRow("AI Tour Generation", enabled: hasKey)
             featureRow("Tour Stop Narration", enabled: hasKey)
+            featureRow("Natural Voice (OpenAI TTS)", enabled: hasOpenAIKey)
             featureRow("Voice Guide", enabled: voiceEnabled)
             featureRow("Walking Directions", enabled: true)
             featureRow("Offline Template Responses", enabled: true)
