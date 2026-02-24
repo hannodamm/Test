@@ -487,6 +487,8 @@ struct TourView: View {
                 guard !Task.isCancelled else { return }
                 tourViewModel.checkProximityToCurrentStop(userLocation: location)
                 tourViewModel.checkProximityToDiscoveryPoints(userLocation: location)
+                tourViewModel.checkDepartureFromStop(userLocation: location)
+                tourViewModel.checkApproachToNextStop(userLocation: location)
             }
         }
         .onChange(of: locationManager.enteredRegionId) { _, regionId in
@@ -521,6 +523,17 @@ struct TourView: View {
                     try? await Task.sleep(for: .seconds(2))
                     await speechService.speakStopNarration(stop, tour: tourViewModel.currentTour)
                 }
+            }
+        }
+        .onChange(of: tourViewModel.hasDepartedCurrentStop) { _, departed in
+            if departed, let currentStop = tourViewModel.currentStop,
+               let narration = currentStop.walkingNarration {
+                speechService.speakWalkingNarration(narration, persona: tour.guidePersona)
+            }
+        }
+        .onChange(of: tourViewModel.approachingNextStop) { _, approaching in
+            if approaching, let nextStop = tourViewModel.nextStop {
+                speechService.speakApproachTeaser(for: nextStop, persona: tour.guidePersona)
             }
         }
         .onAppear { cachedDiscoveryPoints = discoveryPointsForMap }

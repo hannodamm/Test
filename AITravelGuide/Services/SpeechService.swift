@@ -330,6 +330,32 @@ final class SpeechService: NSObject, ObservableObject {
         speak(text)
     }
 
+    func speakApproachTeaser(for stop: TourStop, persona: GuidePersona? = nil) {
+        // Don't interrupt an in-progress narration
+        guard !isSpeaking && !isPaused else { return }
+
+        let templates: [String]
+        if persona != nil {
+            templates = [
+                "Coming up ahead is \(stop.name).",
+                "We're almost at \(stop.name). You're going to like this one.",
+                "Just a bit further — \(stop.name) is right ahead."
+            ]
+        } else {
+            templates = [
+                "Coming up ahead is \(stop.name).",
+                "You're approaching \(stop.name).",
+                "Almost there — \(stop.name) is just ahead."
+            ]
+        }
+
+        var text = templates.randomElement()!
+        if let tip = stop.tips {
+            text += " Quick tip: \(tip)"
+        }
+        speak(text)
+    }
+
     func speakDirectionSummary(to stop: TourStop, steps: [String], distance: String?) {
         var text = "Walking to \(stop.name)."
         if let distance {

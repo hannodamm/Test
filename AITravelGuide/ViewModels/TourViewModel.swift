@@ -26,10 +26,15 @@ final class TourViewModel: ObservableObject {
     @Published var tourHistory: [Tour] = []
     @Published var showStopDetail: Bool = false
     @Published var arrivedAtStop: Bool = false
+    @Published var hasDepartedCurrentStop: Bool = false
 
     // Discovery points
     @Published var nearbyDiscoveryPoint: DiscoveryPoint?
     private var discoveredPointIds: Set<UUID> = []
+
+    // Approach detection
+    @Published var approachingNextStop: Bool = false
+    private var hasShownApproaching = false
 
     // Progress commentary
     @Published var progressCommentary: String?
@@ -137,6 +142,9 @@ final class TourViewModel: ObservableObject {
         isOnTour = true
         currentStopIndex = 0
         arrivedAtStop = false
+        hasDepartedCurrentStop = false
+        approachingNextStop = false
+        hasShownApproaching = false
         discoveredPointIds = []
         nearbyDiscoveryPoint = nil
         progressCommentary = nil
@@ -163,6 +171,9 @@ final class TourViewModel: ObservableObject {
         if currentStopIndex + 1 < tour.stops.count {
             currentStopIndex += 1
             arrivedAtStop = false
+            hasDepartedCurrentStop = false
+            approachingNextStop = false
+            hasShownApproaching = false
         } else {
             endTour()
         }
@@ -172,6 +183,7 @@ final class TourViewModel: ObservableObject {
         if currentStopIndex > 0 {
             currentStopIndex -= 1
             arrivedAtStop = false
+            hasDepartedCurrentStop = false
         }
     }
 
@@ -180,6 +192,7 @@ final class TourViewModel: ObservableObject {
               index >= 0, index < tour.stops.count else { return }
         currentStopIndex = index
         arrivedAtStop = false
+        hasDepartedCurrentStop = false
         showStopDetail = true
     }
 
@@ -202,6 +215,23 @@ final class TourViewModel: ObservableObject {
         let distance = stop.distance(from: userLocation)
         if distance <= threshold && !arrivedAtStop {
             arrivedAtStop = true
+        }
+    }
+
+    func checkDepartureFromStop(userLocation: CLLocation) {
+        guard let stop = currentStop, arrivedAtStop, !hasDepartedCurrentStop else { return }
+        let distance = stop.distance(from: userLocation)
+        if distance > 100 {
+            hasDepartedCurrentStop = true
+        }
+    }
+
+    func checkApproachToNextStop(userLocation: CLLocation) {
+        guard let next = nextStop, !hasShownApproaching else { return }
+        let distance = next.distance(from: userLocation)
+        if distance <= 150 {
+            hasShownApproaching = true
+            approachingNextStop = true
         }
     }
 

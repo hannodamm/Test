@@ -278,9 +278,19 @@ final class TourGuideService: ObservableObject {
 
         let categoryGuidance = guidanceForCategory(category, locationName: locationName)
 
+        let hour = Calendar.current.component(.hour, from: Date())
+        let timeOfDay: String
+        switch hour {
+        case 6..<12: timeOfDay = "morning"
+        case 12..<17: timeOfDay = "afternoon"
+        case 17..<21: timeOfDay = "evening"
+        default: timeOfDay = "night"
+        }
+
         let prompt = """
         Design a \(category.rawValue) walking tour in \(locationName) \
         (near \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))).
+        It's currently \(timeOfDay) — tailor tips, atmosphere descriptions, and recommendations accordingly.
 
         Pick \(numberOfStops) real, specific places that a knowledgeable local guide would recommend. \
         They should be within walking distance of each other (roughly 2km total) and ordered as a logical walking route.
@@ -304,17 +314,18 @@ final class TourGuideService: ObservableObject {
             {
               "name": "The actual, real name of this place",
               "searchQuery": "A precise search query to find this place on Apple Maps (e.g. 'Marienplatz Munich' or 'English Garden Munich')",
-              "description": "A vivid 2-3 sentence description of what makes this place special. Be specific — mention actual features, history, or atmosphere.",
+              "description": "A vivid 2-3 sentence description written as spoken narration — use directions like 'Look to your left...', 'Notice the...', 'As you face the entrance...'",
               "historicalNote": "A specific historical fact or story about this place, or null if not relevant",
               "tip": "A practical insider tip (best time to visit, what to look for, where to stand, what to order, etc.)",
               "durationMinutes": 15,
               "iconType": "landmark",
-              "walkingNarration": "What to notice and enjoy while walking from the previous stop to this one (null for the first stop)",
+              "walkingNarration": "What to notice and enjoy while walking from the previous stop to this one. Write as spoken — 'As you walk along...', 'On your right you'll see...' (null for the first stop)",
               "discoveryPoints": [
                 {
                   "name": "Something interesting to notice between stops",
-                  "description": "Look left/right — a brief, vivid description of this discovery",
-                  "searchQuery": "A search query to find this point on a map"
+                  "description": "A brief, vivid spoken description — 'Look to your left...', 'Notice the...'",
+                  "searchQuery": "A search query to find this point on a map (e.g. 'Fountain of Neptune Florence')",
+                  "iconSystemName": "An SF Symbol name like 'building.2', 'leaf.fill', 'music.note', 'paintpalette.fill', or 'eye.fill'"
                 }
               ]
             }
@@ -329,7 +340,8 @@ final class TourGuideService: ObservableObject {
         - Order stops as a logical walking route, not random
         - Make descriptions vivid and specific to each place, never generic
         - DO NOT just list museums unless this is specifically an Art tour
-        - Include 1-3 discoveryPoints per stop — things to notice on the walk between stops
+        - Each stop MUST have 2-3 discoveryPoints with a REQUIRED searchQuery for each — things to notice on the walk between stops
+        - discoveryPoints searchQuery must be specific enough to locate on a map (e.g. 'Palazzo della Ragione Milan', not just 'old building')
         - walkingNarration should be null for the first stop
         """
 
@@ -363,7 +375,8 @@ final class TourGuideService: ObservableObject {
                     discoveryPoints.append(DiscoveryPoint(
                         name: dp.name,
                         description: dp.description,
-                        coordinate: dpCoord
+                        coordinate: dpCoord,
+                        iconSystemName: dp.iconSystemName ?? "eye.fill"
                     ))
                 }
 
@@ -469,6 +482,7 @@ final class TourGuideService: ObservableObject {
         let name: String
         let description: String
         let searchQuery: String
+        let iconSystemName: String?
     }
 
     private func parseAIDesignedTour(_ json: String) -> AIDesignedTour? {
@@ -513,6 +527,7 @@ final class TourGuideService: ObservableObject {
             let name: String
             let description: String
             let searchQuery: String?
+            let iconSystemName: String?
         }
 
         do {
@@ -533,12 +548,13 @@ final class TourGuideService: ObservableObject {
             }
 
             let stops = parsed.stops.map { stop in
-                let dps = (stop.discoveryPoints ?? []).compactMap { dp -> AIDiscoveryPoint? in
-                    guard let query = dp.searchQuery, !query.isEmpty else { return nil }
+                let dps = (stop.discoveryPoints ?? []).map { dp -> AIDiscoveryPoint in
+                    let query = (dp.searchQuery?.isEmpty == false) ? dp.searchQuery! : "\(dp.name) \(stop.searchQuery)"
                     return AIDiscoveryPoint(
                         name: dp.name,
                         description: dp.description,
-                        searchQuery: query
+                        searchQuery: query,
+                        iconSystemName: dp.iconSystemName
                     )
                 }
                 return AIDesignedStop(
