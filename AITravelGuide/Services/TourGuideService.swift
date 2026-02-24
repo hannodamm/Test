@@ -119,21 +119,8 @@ final class TourGuideService: ObservableObject {
 
         guard !validStops.isEmpty else { return nil }
 
-        // Reindex stops
-        let reindexedStops = validStops.enumerated().map { index, stop in
-            TourStop(
-                name: stop.name,
-                description: stop.description,
-                coordinate: stop.coordinate,
-                orderIndex: index,
-                durationMinutes: stop.durationMinutes,
-                historicalNote: stop.historicalNote,
-                tips: stop.tips,
-                imageSystemName: stop.imageSystemName,
-                walkingNarration: stop.walkingNarration,
-                discoveryPoints: stop.discoveryPoints
-            )
-        }
+        // Optimize walking route order based on geocoded coordinates
+        let reindexedStops = optimizeStopOrder(stops: validStops, from: coordinate)
 
         // Optionally enrich with Claude if API key available and template is a skeleton
         var finalStops = reindexedStops
@@ -403,21 +390,8 @@ final class TourGuideService: ObservableObject {
 
             guard !validStops.isEmpty else { return nil }
 
-            // Reindex stops
-            let reindexedStops = validStops.enumerated().map { index, stop in
-                TourStop(
-                    name: stop.name,
-                    description: stop.description,
-                    coordinate: stop.coordinate,
-                    orderIndex: index,
-                    durationMinutes: stop.durationMinutes,
-                    historicalNote: stop.historicalNote,
-                    tips: stop.tips,
-                    imageSystemName: stop.imageSystemName,
-                    walkingNarration: stop.walkingNarration,
-                    discoveryPoints: stop.discoveryPoints
-                )
-            }
+            // Optimize walking route order based on geocoded coordinates
+            let reindexedStops = optimizeStopOrder(stops: validStops, from: coordinate)
 
             let totalDistance = calculateRouteDistance(stops: reindexedStops, from: coordinate)
             let walkingMinutes = Int(totalDistance / 80.0)
@@ -922,6 +896,109 @@ final class TourGuideService: ObservableObject {
         }
 
         return selected
+    }
+
+    // MARK: - Route Optimization
+
+    /// Reorders stops into an efficient walking route using nearest-neighbor + 2-opt improvement.
+    private func optimizeStopOrder(
+        stops: [TourStop],
+        from start: CLLocationCoordinate2D
+    ) -> [TourStop] {
+        guard stops.count > 2 else {
+            return stops.enumerated().map { index, stop in
+                TourStop(name: stop.name, description: stop.description,
+                         coordinate: stop.coordinate, orderIndex: index,
+                         durationMinutes: stop.durationMinutes,
+                         historicalNote: stop.historicalNote, tips: stop.tips,
+                         imageSystemName: stop.imageSystemName,
+                         walkingNarration: stop.walkingNarration,
+                         discoveryPoints: stop.discoveryPoints)
+            }
+        }
+
+        // Step 1: Nearest-neighbor ordering
+        var remaining = stops
+        var ordered: [TourStop] = []
+        var currentCoord = start
+
+        while !remaining.isEmpty {
+            let currentLoc = CLLocation(latitude: currentCoord.latitude, longitude: currentCoord.longitude)
+            remaining.sort { s1, s2 in
+                CLLocation(latitude: s1.latitude, longitude: s1.longitude).distance(from: currentLoc) <
+                CLLocation(latitude: s2.latitude, longitude: s2.longitude).distance(from: currentLoc)
+            }
+            let next = remaining.removeFirst()
+            ordered.append(next)
+            currentCoord = next.coordinate
+        }
+
+        // Step 2: 2-opt improvement to remove crossings
+        ordered = twoOptImprove(ordered, from: start)
+
+        // Determine which stops changed predecessor and clear their walkingNarration
+        let oldNames = stops.map { $0.name }
+        let newNames = ordered.map { $0.name }
+
+        return ordered.enumerated().map { index, stop in
+            // Clear walkingNarration if predecessor changed (or for first stop)
+            let predecessorChanged: Bool
+            if index == 0 {
+                predecessorChanged = false // first stop narration is typically nil anyway
+            } else {
+                let oldIndex = oldNames.firstIndex(of: stop.name)
+                let oldPredecessor = oldIndex.flatMap { $0 > 0 ? oldNames[$0 - 1] : nil }
+                let newPredecessor = newNames[index - 1]
+                predecessorChanged = oldPredecessor != newPredecessor
+            }
+
+            return TourStop(
+                name: stop.name, description: stop.description,
+                coordinate: stop.coordinate, orderIndex: index,
+                durationMinutes: stop.durationMinutes,
+                historicalNote: stop.historicalNote, tips: stop.tips,
+                imageSystemName: stop.imageSystemName,
+                walkingNarration: predecessorChanged ? nil : stop.walkingNarration,
+                discoveryPoints: stop.discoveryPoints)
+        }
+    }
+
+    /// Standard 2-opt: iteratively reverse segments to reduce total route distance.
+    private func twoOptImprove(_ route: [TourStop], from start: CLLocationCoordinate2D) -> [TourStop] {
+        guard route.count > 2 else { return route }
+
+        func totalDistance(_ r: [TourStop]) -> Double {
+            var dist: Double = 0
+            var prev = CLLocation(latitude: start.latitude, longitude: start.longitude)
+            for stop in r {
+                let loc = CLLocation(latitude: stop.latitude, longitude: stop.longitude)
+                dist += prev.distance(from: loc)
+                prev = loc
+            }
+            return dist
+        }
+
+        var best = route
+        var bestDist = totalDistance(best)
+        var improved = true
+
+        while improved {
+            improved = false
+            for i in 0..<(best.count - 1) {
+                for j in (i + 1)..<best.count {
+                    var candidate = best
+                    candidate[(i)...j].reverse()
+                    let candidateDist = totalDistance(candidate)
+                    if candidateDist < bestDist {
+                        best = candidate
+                        bestDist = candidateDist
+                        improved = true
+                    }
+                }
+            }
+        }
+
+        return best
     }
 
     private func calculateRouteDistance(stops: [TourStop], from start: CLLocationCoordinate2D) -> Double {
