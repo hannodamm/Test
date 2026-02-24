@@ -13,6 +13,7 @@ final class SpeechService: NSObject, ObservableObject {
     private var cachedVoice: AVSpeechSynthesisVoice?
     private var isUsingOpenAI = false
     private var cachedNarrations: [String: String] = [:]
+    private var preloadTasks: [String: Task<String?, Never>] = [:]
 
     /// Reads voice-enabled preference from UserDefaults (toggled in Settings)
     var voiceEnabled: Bool {
@@ -213,21 +214,32 @@ final class SpeechService: NSObject, ObservableObject {
     func preloadStopNarration(_ stop: TourStop, tour: Tour?) async {
         guard APIKeyManager.shared.hasAPIKey else { return }
         guard cachedNarrations[stop.name] == nil else { return }
+        guard preloadTasks[stop.name] == nil else { return }
 
         let context = buildMinimalContext(stop: stop, tour: tour)
-        let claudeAPI = ClaudeAPIService()
-        if let narration = await claudeAPI.narrateStop(
-            stop: stop,
-            locationContext: context,
-            guidePersona: tour?.guidePersona
-        ) {
+        let persona = tour?.guidePersona
+
+        let task = Task<String?, Never> {
+            let claudeAPI = ClaudeAPIService()
+            return await claudeAPI.narrateStop(
+                stop: stop,
+                locationContext: context,
+                guidePersona: persona
+            )
+        }
+        preloadTasks[stop.name] = task
+
+        if let narration = await task.value {
             cachedNarrations[stop.name] = narration
         }
+        preloadTasks[stop.name] = nil
     }
 
     /// Clear preloaded narration cache (call on tour discard/end)
     func clearNarrationCache() {
         cachedNarrations.removeAll()
+        preloadTasks.values.forEach { $0.cancel() }
+        preloadTasks.removeAll()
     }
 
     /// AI-powered narration with fallback to template text
@@ -238,6 +250,15 @@ final class SpeechService: NSObject, ObservableObject {
         if let cached = cachedNarrations[stop.name] {
             speak(cached)
             return
+        }
+
+        // If a preload is in progress, await it instead of speaking filler
+        if let preloadTask = preloadTasks[stop.name] {
+            if let narration = await preloadTask.value {
+                cachedNarrations[stop.name] = narration
+                speak(narration)
+                return
+            }
         }
 
         if APIKeyManager.shared.hasAPIKey {

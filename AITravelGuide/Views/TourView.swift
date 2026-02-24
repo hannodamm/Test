@@ -17,6 +17,8 @@ struct TourView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showDiscoveryBanner = false
     @State private var showProgressBanner = false
+    @State private var locationCheckTask: Task<Void, Never>?
+    @State private var cachedDiscoveryPoints: [DiscoveryPoint] = []
 
     var body: some View {
         NavigationStack {
@@ -478,7 +480,11 @@ struct TourView: View {
             }
         }
         .onChange(of: locationManager.currentLocation) { _, newLocation in
-            if let location = newLocation {
+            guard let location = newLocation else { return }
+            locationCheckTask?.cancel()
+            locationCheckTask = Task {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
                 tourViewModel.checkProximityToCurrentStop(userLocation: location)
                 tourViewModel.checkProximityToDiscoveryPoints(userLocation: location)
             }
@@ -490,21 +496,21 @@ struct TourView: View {
         }
         .onChange(of: tourViewModel.nearbyDiscoveryPoint) { _, point in
             if let point {
-                showDiscoveryBanner = true
+                withAnimation(.none) { showDiscoveryBanner = true }
                 speechService.speak(point.description)
                 Task {
                     try? await Task.sleep(for: .seconds(15))
-                    await MainActor.run { showDiscoveryBanner = false }
+                    await MainActor.run { withAnimation(.none) { showDiscoveryBanner = false } }
                 }
             }
         }
         .onChange(of: tourViewModel.progressCommentary) { _, commentary in
             if let commentary {
-                showProgressBanner = true
+                withAnimation(.none) { showProgressBanner = true }
                 speechService.speak(commentary)
                 Task {
                     try? await Task.sleep(for: .seconds(10))
-                    await MainActor.run { showProgressBanner = false }
+                    await MainActor.run { withAnimation(.none) { showProgressBanner = false } }
                 }
             }
         }
@@ -516,6 +522,10 @@ struct TourView: View {
                     await speechService.speakStopNarration(stop, tour: tourViewModel.currentTour)
                 }
             }
+        }
+        .onAppear { cachedDiscoveryPoints = discoveryPointsForMap }
+        .onChange(of: tourViewModel.currentStopIndex) { _, _ in
+            cachedDiscoveryPoints = discoveryPointsForMap
         }
         .sheet(isPresented: $showStopChat) {
             if let stop = tourViewModel.currentStop {
@@ -851,7 +861,7 @@ struct TourView: View {
             }
         }
 
-        ForEach(discoveryPointsForMap, id: \.id) { point in
+        ForEach(cachedDiscoveryPoints, id: \.id) { point in
             Annotation(point.name, coordinate: point.coordinate) {
                 ZStack {
                     Circle().fill(.orange).frame(width: 22, height: 22)
