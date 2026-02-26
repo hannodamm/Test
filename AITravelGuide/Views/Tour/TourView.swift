@@ -559,21 +559,21 @@ struct TourView: View {
         }
         .onChange(of: tourViewModel.nearbyDiscoveryPoint) { _, point in
             if let point {
-                withAnimation(.none) { showDiscoveryBanner = true }
+                withAnimation(AppAnimation.bannerIn) { showDiscoveryBanner = true }
                 speechService.speak(point.description)
                 Task {
                     try? await Task.sleep(for: .seconds(15))
-                    await MainActor.run { withAnimation(.none) { showDiscoveryBanner = false } }
+                    await MainActor.run { withAnimation(AppAnimation.bannerOut) { showDiscoveryBanner = false } }
                 }
             }
         }
         .onChange(of: tourViewModel.progressCommentary) { _, commentary in
             if let commentary {
-                withAnimation(.none) { showProgressBanner = true }
+                withAnimation(AppAnimation.bannerIn) { showProgressBanner = true }
                 speechService.speak(commentary)
                 Task {
                     try? await Task.sleep(for: .seconds(10))
-                    await MainActor.run { withAnimation(.none) { showProgressBanner = false } }
+                    await MainActor.run { withAnimation(AppAnimation.bannerOut) { showProgressBanner = false } }
                 }
             }
         }
@@ -734,7 +734,7 @@ struct TourView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding()
-                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .background(AppColors.historicalBackground, in: RoundedRectangle(cornerRadius: 8))
                 }
 
                 if let tip = stop.tips {
@@ -746,7 +746,7 @@ struct TourView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding()
-                    .background(Color.yellow.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .background(AppColors.tipBackground, in: RoundedRectangle(cornerRadius: 8))
                 }
 
                 activeStopSecondaryButtons(stop: stop, tour: tour)
@@ -886,7 +886,7 @@ struct TourView: View {
     private func discoveryBanner(point: DiscoveryPoint) -> some View {
         HStack {
             Image(systemName: point.iconSystemName)
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppColors.discoveryIcon)
             VStack(alignment: .leading, spacing: 2) {
                 Text(point.name)
                     .font(.subheadline.bold())
@@ -901,13 +901,14 @@ struct TourView: View {
             }
         }
         .padding()
-        .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        .background(AppColors.discoveryBackground, in: RoundedRectangle(cornerRadius: 8))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     private func progressBanner(commentary: String) -> some View {
         HStack {
             Image(systemName: "flag.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(AppColors.progressIcon)
             Text(commentary)
                 .font(.subheadline.bold())
             Spacer()
@@ -917,7 +918,8 @@ struct TourView: View {
             }
         }
         .padding()
-        .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        .background(AppColors.progressBackground, in: RoundedRectangle(cornerRadius: 8))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Active Tour Map Content

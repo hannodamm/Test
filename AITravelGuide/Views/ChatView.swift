@@ -125,23 +125,9 @@ struct ChatView: View {
     // MARK: - Suggested Questions
 
     private var suggestedQuestionsView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(viewModel.suggestedQuestions, id: \.self) { question in
-                    Button {
-                        viewModel.inputText = question
-                        sendMessage()
-                    } label: {
-                        Text(question)
-                            .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.secondarySystemBackground), in: Capsule())
-                    }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+        QuickQuestionsBar(questions: viewModel.suggestedQuestions) { question in
+            viewModel.inputText = question
+            sendMessage()
         }
     }
 

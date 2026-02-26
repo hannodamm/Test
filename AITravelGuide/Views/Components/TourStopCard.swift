@@ -51,14 +51,14 @@ struct TourStopCard: View {
                     if let note = stop.historicalNote {
                         Label(note, systemImage: "book.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppColors.historicalAccent)
                             .lineLimit(2)
                     }
 
                     if let tip = stop.tips {
                         Label(tip, systemImage: "lightbulb.fill")
                             .font(.caption2)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(AppColors.tipAccent)
                             .lineLimit(2)
                     }
                 }

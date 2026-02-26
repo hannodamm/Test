@@ -63,23 +63,9 @@ struct StopChatSheet: View {
                 }
 
                 if messages.count <= 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(quickQuestions, id: \.self) { question in
-                                Button {
-                                    inputText = question
-                                    sendMessage()
-                                } label: {
-                                    Text(question)
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Color(.secondarySystemBackground), in: Capsule())
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
+                    QuickQuestionsBar(questions: quickQuestions) { question in
+                        inputText = question
+                        sendMessage()
                     }
                 }
 

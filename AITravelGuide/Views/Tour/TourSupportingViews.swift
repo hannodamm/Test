@@ -30,6 +30,7 @@ struct TourCategoryCard: View {
             .foregroundStyle(isSelected ? .white : .primary)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+        .pressable()
     }
 }
 

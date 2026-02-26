@@ -52,7 +52,7 @@ struct HighlightCard: View {
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle())
     }
 
     private var categoryGradient: LinearGradient {
