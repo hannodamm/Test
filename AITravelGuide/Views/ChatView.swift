@@ -88,6 +88,23 @@ struct ChatView: View {
                         TypingIndicator()
                     }
 
+                    if viewModel.lastMessageWasError {
+                        Button {
+                            // Re-send the last user message
+                            if let lastUserMsg = viewModel.messages.last(where: { $0.role == .user }) {
+                                viewModel.inputText = lastUserMsg.content
+                                sendMessage()
+                            }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .font(.subheadline.bold())
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.1), in: Capsule())
+                        }
+                        .padding(.top, 4)
+                    }
+
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding()

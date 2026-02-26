@@ -8,6 +8,7 @@ final class ChatViewModel: ObservableObject {
     @Published var inputText: String = ""
     @Published var isTyping: Bool = false
     @Published var isUsingAI: Bool = false
+    @Published var lastMessageWasError: Bool = false
 
     private let claudeAPI = ClaudeAPIService()
     private let tourGuideService = TourGuideService()
@@ -18,7 +19,7 @@ final class ChatViewModel: ObservableObject {
         let hasKey = APIKeyManager.shared.hasAPIKey
         isUsingAI = hasKey
         let greeting = hasKey
-            ? "Hello! I'm your AI travel guide powered by Claude. I can help you explore the area, answer questions about local attractions, history, food, and more. What would you like to know?"
+            ? "Hello! I'm your AI travel guide powered by Claude. Here's what I can help with:\n\n- Local attractions & hidden gems\n- Restaurant & cafe recommendations\n- History & culture of the area\n- Transport & navigation tips\n- Safety advice & local customs\n\nAsk me anything about where you are!"
             : "Hello! I'm your travel guide. Add a Claude API key in Settings to unlock AI-powered responses. I can still help with basic questions about the area!"
         messages.append(ChatMessage.assistantMessage(greeting))
     }
@@ -68,6 +69,8 @@ final class ChatViewModel: ObservableObject {
             )
         }
 
+        lastMessageWasError = response.hasPrefix("I'm having trouble connecting")
+            || response.hasPrefix("Please add your Claude API key")
         let assistantMessage = ChatMessage.assistantMessage(response)
         messages.append(assistantMessage)
         isTyping = false

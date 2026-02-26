@@ -16,6 +16,9 @@ struct AITravelGuideApp: App {
                 .environmentObject(exploreViewModel)
                 .environmentObject(speechService)
                 .environmentObject(tourStorageService)
+                .onAppear {
+                    tourViewModel.storageService = tourStorageService
+                }
         }
     }
 }

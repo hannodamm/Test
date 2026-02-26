@@ -14,6 +14,7 @@ final class SpeechService: NSObject, ObservableObject {
     private var isUsingOpenAI = false
     private var cachedNarrations: [String: String] = [:]
     private var preloadTasks: [String: Task<String?, Never>] = [:]
+    private var currentTempFileURL: URL?
 
     /// Reads voice-enabled preference from UserDefaults (toggled in Settings)
     var voiceEnabled: Bool {
@@ -105,6 +106,10 @@ final class SpeechService: NSObject, ObservableObject {
         }
         audioPlayer?.stop()
         audioPlayer = nil
+        if let tempFile = currentTempFileURL {
+            try? FileManager.default.removeItem(at: tempFile)
+            currentTempFileURL = nil
+        }
         isSpeaking = false
         isPaused = false
         isUsingOpenAI = false
@@ -150,8 +155,13 @@ final class SpeechService: NSObject, ObservableObject {
                 return
             }
 
+            // Clean up previous temp file before creating new one
+            if let previous = currentTempFileURL {
+                try? FileManager.default.removeItem(at: previous)
+            }
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("tts_\(UUID().uuidString).mp3")
             try data.write(to: tempURL)
+            currentTempFileURL = tempURL
 
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)

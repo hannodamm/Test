@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import MapKit
+import SwiftUI
 
 struct PointOfInterest: Identifiable {
     let id: UUID
@@ -90,18 +91,18 @@ enum POICategory: String, CaseIterable {
         }
     }
 
-    var color: String {
+    var swiftUIColor: Color {
         switch self {
-        case .landmark: return "orange"
-        case .restaurant: return "red"
-        case .museum: return "purple"
-        case .park: return "green"
-        case .shopping: return "pink"
-        case .entertainment: return "yellow"
-        case .transit: return "blue"
-        case .hotel: return "indigo"
-        case .historical: return "brown"
-        case .viewpoint: return "teal"
+        case .landmark: return .orange
+        case .restaurant: return .red
+        case .museum: return .purple
+        case .park: return .green
+        case .shopping: return .pink
+        case .entertainment: return .yellow
+        case .transit: return .blue
+        case .hotel: return .indigo
+        case .historical: return .brown
+        case .viewpoint: return .teal
         }
     }
 

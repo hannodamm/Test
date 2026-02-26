@@ -22,8 +22,8 @@ final class TourViewModel: ObservableObject {
     @Published var currentStopIndex: Int = 0
     @Published var isOnTour: Bool = false
     @Published var isGenerating: Bool = false
+    @Published var tourGenerationError: String?
     @Published var selectedCategory: TourCategory = .general
-    @Published var tourHistory: [Tour] = []
     @Published var showStopDetail: Bool = false
     @Published var arrivedAtStop: Bool = false
     @Published var hasDepartedCurrentStop: Bool = false
@@ -49,6 +49,7 @@ final class TourViewModel: ObservableObject {
     @Published var isCalculatingRoutes: Bool = false
 
     private let tourGuideService = TourGuideService()
+    var storageService: TourStorageService?
 
     // Track last generation parameters for regeneration
     private var lastCoordinate: CLLocationCoordinate2D?
@@ -112,6 +113,7 @@ final class TourViewModel: ObservableObject {
         placemark: CLPlacemark?
     ) async {
         isGenerating = true
+        tourGenerationError = nil
         lastCoordinate = coordinate
         lastPlacemark = placemark
 
@@ -125,6 +127,8 @@ final class TourViewModel: ObservableObject {
             currentTour = tour
             currentStopIndex = 0
             await calculateWalkingRoutes()
+        } else {
+            tourGenerationError = "Couldn't generate a tour. Check your internet connection and API key, then try again."
         }
         isGenerating = false
     }
@@ -154,7 +158,7 @@ final class TourViewModel: ObservableObject {
 
     func endTour() {
         if let tour = currentTour {
-            tourHistory.append(tour)
+            storageService?.addToHistory(tour)
         }
         isOnTour = false
         currentTour = nil
@@ -201,10 +205,9 @@ final class TourViewModel: ObservableObject {
     func rateTour(_ stars: Int) {
         guard stars >= 1, stars <= 5 else { return }
         currentTour?.rating = stars
-        // Also update in history
-        if let tour = currentTour,
-           let idx = tourHistory.firstIndex(where: { $0.id == tour.id }) {
-            tourHistory[idx].rating = stars
+        // Also update in persisted history
+        if let tour = currentTour {
+            storageService?.addToHistory(tour)
         }
     }
 
@@ -265,57 +268,55 @@ final class TourViewModel: ObservableObject {
         }
 
         isCalculatingRoutes = true
-        var segments: [[CLLocationCoordinate2D]] = []
-        var etas: [TimeInterval] = []
-        var allSteps: [[WalkingDirectionStep]] = []
-        var distances: [CLLocationDistance] = []
+        let segmentCount = tour.stops.count - 1
+        let stops = tour.stops
 
-        for i in 0..<(tour.stops.count - 1) {
-            let source = tour.stops[i]
-            let destination = tour.stops[i + 1]
+        // Calculate all segments in parallel
+        let results = await withTaskGroup(
+            of: (Int, [CLLocationCoordinate2D], TimeInterval, [WalkingDirectionStep], CLLocationDistance).self
+        ) { group in
+            for i in 0..<segmentCount {
+                let source = stops[i]
+                let destination = stops[i + 1]
+                group.addTask {
+                    let request = MKDirections.Request()
+                    request.source = MKMapItem(placemark: MKPlacemark(coordinate: source.coordinate))
+                    request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination.coordinate))
+                    request.transportType = .walking
 
-            let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(coordinate: source.coordinate))
-            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination.coordinate))
-            request.transportType = .walking
+                    let directions = MKDirections(request: request)
+                    do {
+                        let response = try await directions.calculate()
+                        if let route = response.routes.first {
+                            let count = route.polyline.pointCount
+                            var coords = [CLLocationCoordinate2D](
+                                repeating: CLLocationCoordinate2D(),
+                                count: count
+                            )
+                            route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
 
-            let directions = MKDirections(request: request)
-            do {
-                let response = try await directions.calculate()
-                if let route = response.routes.first {
-                    let count = route.polyline.pointCount
-                    var coords = [CLLocationCoordinate2D](
-                        repeating: CLLocationCoordinate2D(),
-                        count: count
-                    )
-                    route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
-                    segments.append(coords)
-                    etas.append(route.expectedTravelTime)
-                    distances.append(route.distance)
-
-                    let steps = route.steps
-                        .filter { !$0.instructions.isEmpty }
-                        .map { WalkingDirectionStep(instructions: $0.instructions, distance: $0.distance) }
-                    allSteps.append(steps)
-                } else {
-                    segments.append([source.coordinate, destination.coordinate])
-                    etas.append(0)
-                    allSteps.append([])
-                    distances.append(0)
+                            let steps = route.steps
+                                .filter { !$0.instructions.isEmpty }
+                                .map { WalkingDirectionStep(instructions: $0.instructions, distance: $0.distance) }
+                            return (i, coords, route.expectedTravelTime, steps, route.distance)
+                        }
+                    } catch {}
+                    // Fallback to straight line
+                    return (i, [source.coordinate, destination.coordinate], TimeInterval(0), [WalkingDirectionStep](), CLLocationDistance(0))
                 }
-            } catch {
-                // Fallback to straight line
-                segments.append([source.coordinate, destination.coordinate])
-                etas.append(0)
-                allSteps.append([])
-                distances.append(0)
             }
+
+            var collected = [(Int, [CLLocationCoordinate2D], TimeInterval, [WalkingDirectionStep], CLLocationDistance)]()
+            for await result in group {
+                collected.append(result)
+            }
+            return collected.sorted { $0.0 < $1.0 }
         }
 
-        walkingRouteSegments = segments
-        walkingETAs = etas
-        walkingSteps = allSteps
-        walkingDistances = distances
+        walkingRouteSegments = results.map { $0.1 }
+        walkingETAs = results.map { $0.2 }
+        walkingSteps = results.map { $0.3 }
+        walkingDistances = results.map { $0.4 }
         isCalculatingRoutes = false
     }
 

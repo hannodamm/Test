@@ -37,7 +37,7 @@ struct TourView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(isPresented: $showRating) {
-            if let tour = tourViewModel.currentTour ?? tourViewModel.tourHistory.last {
+            if let tour = tourViewModel.currentTour ?? tourStorageService.tourHistory.first {
                 TourRatingSheet(tour: tour, tourViewModel: tourViewModel, storageService: tourStorageService)
             }
         }
@@ -91,6 +91,24 @@ struct TourView: View {
                 tourLocationInfo
                     .padding(.horizontal)
 
+                // Error banner
+                if let error = tourViewModel.tourGenerationError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.subheadline)
+                        Spacer()
+                        Button("Try Again") {
+                            triggerTourGeneration()
+                        }
+                        .font(.subheadline.bold())
+                    }
+                    .padding()
+                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                }
+
                 // Generate button
                 Button {
                     triggerTourGeneration()
@@ -109,14 +127,43 @@ struct TourView: View {
                 .disabled(locationManager.currentLocation == nil && exploreViewModel.searchedCoordinate == nil)
                 .padding(.horizontal)
 
+                // Location unavailable hint
+                if locationManager.currentLocation == nil && exploreViewModel.searchedCoordinate == nil {
+                    VStack(spacing: 8) {
+                        Image(systemName: "location.slash.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("Location unavailable")
+                            .font(.subheadline.bold())
+                        Text("Enable Location Services or search for a city in the Explore tab to generate a tour.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            Label("Open Settings", systemImage: "gear")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        .padding(.top, 4)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                }
+
                 // Tour history
-                if !tourViewModel.tourHistory.isEmpty {
+                if !tourStorageService.tourHistory.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Recent Tours")
                             .font(.headline)
                             .padding(.horizontal)
 
-                        ForEach(tourViewModel.tourHistory) { tour in
+                        ForEach(tourStorageService.tourHistory) { tour in
                             Button {
                                 tourViewModel.currentTour = tour
                                 tourViewModel.currentStopIndex = 0
@@ -149,6 +196,20 @@ struct TourView: View {
                             .padding(.horizontal)
                         }
                     }
+                }
+
+                // Empty state when no tours exist
+                if tourStorageService.tourHistory.isEmpty && tourStorageService.savedTours.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("No tours yet")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                        Text("Generate your first tour above!")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
                 }
             }
             .padding(.bottom, 30)
@@ -952,797 +1013,4 @@ struct TourView: View {
         }
     }
 
-}
-
-// MARK: - Tour Rating Sheet
-
-struct TourRatingSheet: View {
-    let tour: Tour
-    let tourViewModel: TourViewModel
-    let storageService: TourStorageService
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var rating: Int = 0
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-
-                Image(systemName: "star.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.orange)
-
-                Text("How was your tour?")
-                    .font(.title2.bold())
-
-                Text(tour.name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                // Star rating
-                HStack(spacing: 12) {
-                    ForEach(1...5, id: \.self) { star in
-                        Button {
-                            withAnimation(.spring(duration: 0.2)) {
-                                rating = star
-                            }
-                        } label: {
-                            Image(systemName: star <= rating ? "star.fill" : "star")
-                                .font(.system(size: 36))
-                                .foregroundStyle(star <= rating ? .orange : .secondary)
-                        }
-                    }
-                }
-                .padding(.vertical)
-
-                if rating > 0 {
-                    Text(ratingLabel)
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button {
-                    if rating > 0 {
-                        var ratedTour = tour
-                        ratedTour.rating = rating
-                        storageService.saveTour(ratedTour)
-                    }
-                    dismiss()
-                } label: {
-                    Text(rating > 0 ? "Submit Rating" : "Skip")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(rating > 0 ? .orange : .secondary)
-                .padding(.horizontal)
-                .padding(.bottom)
-            }
-            .navigationTitle("Rate Tour")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private var ratingLabel: String {
-        switch rating {
-        case 1: return "Not great"
-        case 2: return "Could be better"
-        case 3: return "It was okay"
-        case 4: return "Really enjoyed it!"
-        case 5: return "Amazing tour!"
-        default: return ""
-        }
-    }
-}
-
-// MARK: - Guide Chat Sheet
-
-struct GuideChatSheet: View {
-    let tour: Tour
-    let locationManager: LocationManager
-
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var speechService: SpeechService
-    @State private var messages: [ChatMessage] = []
-    @State private var inputText: String = ""
-    @State private var isTyping: Bool = false
-    @FocusState private var isInputFocused: Bool
-
-    private let claudeAPI = ClaudeAPIService()
-    private let tourGuideService = TourGuideService()
-
-    private var tourLocationDescription: String {
-        if tour.locationName != "the area" {
-            return tour.locationName
-        }
-        return locationManager.locationDescription
-    }
-
-    private var quickQuestions: [String] {
-        [
-            "Where should I eat nearby?",
-            "Is this area safe at night?",
-            "How do I get to the city center?",
-            "What's the best coffee shop around here?",
-            "Any hidden gems nearby?",
-            "What's the local specialty food?"
-        ]
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: tour.guidePersona != nil ? "person.circle.fill" : "globe.americas.fill")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading) {
-                        Text(tour.guidePersona.map { "\($0.name)" } ?? "AI Travel Guide")
-                            .font(.subheadline.bold())
-                        Text(tour.guidePersona?.tagline ?? tourLocationDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Label("On Tour", systemImage: "figure.walk")
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.blue.opacity(0.15), in: Capsule())
-                        .foregroundStyle(.blue)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(messages) { message in
-                                ChatBubble(message: message)
-                            }
-                            if isTyping {
-                                TypingIndicator()
-                            }
-                            Color.clear.frame(height: 1).id("bottom")
-                        }
-                        .padding()
-                    }
-                    .onChange(of: messages.count) { _, _ in
-                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-                    }
-                }
-
-                if messages.count <= 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(quickQuestions, id: \.self) { question in
-                                Button {
-                                    inputText = question
-                                    sendMessage()
-                                } label: {
-                                    Text(question)
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Color(.secondarySystemBackground), in: Capsule())
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    TextField("Ask anything about the area...", text: $inputText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...3)
-                        .focused($isInputFocused)
-                        .submitLabel(.send)
-                        .onSubmit { sendMessage() }
-
-                    Button {
-                        sendMessage()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .blue)
-                    }
-                    .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isTyping)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .background(.bar)
-            }
-            .navigationTitle("Travel Guide")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        speechService.stop()
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .onAppear {
-            if let persona = tour.guidePersona {
-                messages.append(ChatMessage.assistantMessage(persona.greeting))
-            } else {
-                let city = tour.locationName != "the area" ? tour.locationName : (locationManager.currentCity ?? "the area")
-                messages.append(ChatMessage.assistantMessage(
-                    "I'm your travel guide for \(city). Ask me anything — restaurant recommendations, transport tips, safety advice, local customs, or whatever's on your mind!"
-                ))
-            }
-        }
-    }
-
-    private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        messages.append(ChatMessage.userMessage(text))
-        inputText = ""
-        isTyping = true
-
-        Task {
-            let response: String
-            let tourLocation = CLLocation(latitude: tour.centerLatitude, longitude: tour.centerLongitude)
-
-            if APIKeyManager.shared.hasAPIKey {
-                let context = tourGuideService.buildLocationContext(
-                    location: tourLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
-                let enrichedQuestion = "I'm on a tour in \(tour.locationName). \(text)"
-                response = await claudeAPI.ask(
-                    question: enrichedQuestion,
-                    conversationHistory: messages,
-                    locationContext: context,
-                    guidePersona: tour.guidePersona
-                )
-            } else {
-                response = tourGuideService.generateFallbackResponse(
-                    to: text,
-                    location: tourLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
-            }
-
-            messages.append(ChatMessage.assistantMessage(response))
-            isTyping = false
-        }
-    }
-}
-
-// MARK: - Stop Chat Sheet
-
-struct StopChatSheet: View {
-    let stop: TourStop
-    let tour: Tour
-    let locationManager: LocationManager
-
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var speechService: SpeechService
-    @State private var messages: [ChatMessage] = []
-    @State private var inputText: String = ""
-    @State private var isTyping: Bool = false
-    @FocusState private var isInputFocused: Bool
-
-    private let claudeAPI = ClaudeAPIService()
-    private let tourGuideService = TourGuideService()
-
-    private var quickQuestions: [String] {
-        [
-            "Tell me more about \(stop.name)",
-            "What's the history of this place?",
-            "Any tips for visiting here?",
-            "What should I see nearby?"
-        ]
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: stop.imageSystemName)
-                        .foregroundStyle(.accent)
-                    VStack(alignment: .leading) {
-                        Text(stop.name)
-                            .font(.subheadline.bold())
-                        Text("Stop \(stop.orderIndex + 1) on \(tour.name)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(messages) { message in
-                                ChatBubble(message: message)
-                            }
-                            if isTyping {
-                                TypingIndicator()
-                            }
-                            Color.clear.frame(height: 1).id("bottom")
-                        }
-                        .padding()
-                    }
-                    .onChange(of: messages.count) { _, _ in
-                        withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-                    }
-                }
-
-                if messages.count <= 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(quickQuestions, id: \.self) { question in
-                                Button {
-                                    inputText = question
-                                    sendMessage()
-                                } label: {
-                                    Text(question)
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Color(.secondarySystemBackground), in: Capsule())
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    TextField("Ask about \(stop.name)...", text: $inputText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...3)
-                        .focused($isInputFocused)
-                        .submitLabel(.send)
-                        .onSubmit { sendMessage() }
-
-                    Button {
-                        sendMessage()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .accent)
-                    }
-                    .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isTyping)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .background(.bar)
-            }
-            .navigationTitle("Ask About This Stop")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        speechService.stop()
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .onAppear {
-            if tour.guidePersona != nil {
-                messages.append(ChatMessage.assistantMessage(
-                    "So, you're at \(stop.name). \(stop.description) What would you like to know?"
-                ))
-            } else {
-                messages.append(ChatMessage.assistantMessage(
-                    "You're at \(stop.name). \(stop.description) Ask me anything about this stop, its history, or what to do here!"
-                ))
-            }
-        }
-    }
-
-    private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        messages.append(ChatMessage.userMessage(text))
-        inputText = ""
-        isTyping = true
-
-        Task {
-            let response: String
-            let stopLocation = CLLocation(latitude: stop.latitude, longitude: stop.longitude)
-
-            if APIKeyManager.shared.hasAPIKey {
-                let context = tourGuideService.buildLocationContext(
-                    location: stopLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
-                let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
-                response = await claudeAPI.ask(
-                    question: enrichedQuestion,
-                    conversationHistory: messages,
-                    locationContext: context,
-                    guidePersona: tour.guidePersona
-                )
-            } else {
-                response = tourGuideService.generateFallbackResponse(
-                    to: text,
-                    location: stopLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
-            }
-
-            messages.append(ChatMessage.assistantMessage(response))
-            isTyping = false
-        }
-    }
-}
-
-// MARK: - Tour Category Card
-
-struct TourCategoryCard: View {
-    let category: TourCategory
-    let isSelected: Bool
-    var isCurated: Bool = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: category.systemImage)
-                    .font(.title2)
-                Text(category.rawValue)
-                    .font(.caption.bold())
-                    .multilineTextAlignment(.center)
-                if isCurated {
-                    Text("Curated")
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(isSelected ? Color.white.opacity(0.3) : Color.orange.opacity(0.2))
-                        .foregroundStyle(isSelected ? .white : .orange)
-                        .clipShape(Capsule())
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-    }
-}
-
-// MARK: - Tour History Row
-
-struct TourHistoryRow: View {
-    let tour: Tour
-
-    var body: some View {
-        HStack {
-            Image(systemName: tour.category.systemImage)
-                .foregroundStyle(.accent)
-                .frame(width: 32)
-            VStack(alignment: .leading) {
-                Text(tour.name)
-                    .font(.subheadline.bold())
-                HStack(spacing: 4) {
-                    Text("\(tour.stops.count) stops")
-                    Text("-")
-                    Text(tour.formattedDistance)
-                    if let rating = tour.rating {
-                        Text("-")
-                        HStack(spacing: 1) {
-                            ForEach(1...5, id: \.self) { star in
-                                Image(systemName: star <= rating ? "star.fill" : "star")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(tour.createdAt, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - Walking Directions Sheet
-
-struct WalkingDirectionsSheet: View {
-    let fromStop: TourStop
-    let toStop: TourStop
-    let steps: [WalkingDirectionStep]
-    let routeCoordinates: [CLLocationCoordinate2D]
-    let eta: String?
-    let distance: CLLocationDistance?
-
-    @EnvironmentObject var speechService: SpeechService
-    @Environment(\.dismiss) private var dismiss
-
-    private var isLastStop: Bool { fromStop.id == toStop.id }
-
-    private var formattedDistance: String? {
-        guard let d = distance, d > 0 else { return nil }
-        if d < 1000 { return String(format: "%.0f m", d) }
-        return String(format: "%.1f km", d / 1000)
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Route header
-                    routeHeader
-
-                    // Route map
-                    if !routeCoordinates.isEmpty {
-                        routeMap
-                    }
-
-                    // Turn-by-turn steps
-                    if !steps.isEmpty {
-                        stepsList
-                    } else if isLastStop {
-                        lastStopMessage
-                    } else {
-                        noDirectionsMessage
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Walking Directions")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-                if !steps.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            let stepTexts = steps.map { $0.instructions }
-                            speechService.speakDirectionSummary(
-                                to: toStop,
-                                steps: stepTexts,
-                                distance: formattedDistance
-                            )
-                        } label: {
-                            Image(systemName: speechService.isSpeaking ? "stop.circle.fill" : "speaker.wave.2")
-                                .foregroundStyle(speechService.isSpeaking ? .red : .accent)
-                        }
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    // MARK: - Route Header
-
-    private var routeHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if isLastStop {
-                Text("You're at the last stop")
-                    .font(.headline)
-            } else {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("From")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(fromStop.name)
-                            .font(.subheadline.bold())
-                    }
-                    Image(systemName: "arrow.right")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("To")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(toStop.name)
-                            .font(.subheadline.bold())
-                    }
-                }
-            }
-
-            if !isLastStop {
-                HStack(spacing: 16) {
-                    if let eta {
-                        Label(eta, systemImage: "clock")
-                    }
-                    if let formattedDistance {
-                        Label(formattedDistance, systemImage: "figure.walk")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    // MARK: - Route Map
-
-    private var routeMap: some View {
-        Map(initialPosition: .region(routeRegion)) {
-            Annotation(fromStop.name, coordinate: fromStop.coordinate) {
-                ZStack {
-                    Circle().fill(.blue).frame(width: 28, height: 28)
-                    Text("\(fromStop.orderIndex + 1)")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                }
-            }
-            if !isLastStop {
-                Annotation(toStop.name, coordinate: toStop.coordinate) {
-                    ZStack {
-                        Circle().fill(.green).frame(width: 28, height: 28)
-                        Text("\(toStop.orderIndex + 1)")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.white)
-                    }
-                }
-            }
-            MapPolyline(coordinates: routeCoordinates)
-                .stroke(.blue, lineWidth: 4)
-        }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-        .frame(height: 200)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var routeRegion: MKCoordinateRegion {
-        guard !routeCoordinates.isEmpty else {
-            return MKCoordinateRegion(
-                center: fromStop.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
-            )
-        }
-        var minLat = routeCoordinates[0].latitude
-        var maxLat = routeCoordinates[0].latitude
-        var minLon = routeCoordinates[0].longitude
-        var maxLon = routeCoordinates[0].longitude
-
-        for c in routeCoordinates {
-            minLat = min(minLat, c.latitude)
-            maxLat = max(maxLat, c.latitude)
-            minLon = min(minLon, c.longitude)
-            maxLon = max(maxLon, c.longitude)
-        }
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (minLat + maxLat) / 2,
-                longitude: (minLon + maxLon) / 2
-            ),
-            span: MKCoordinateSpan(
-                latitudeDelta: max((maxLat - minLat) * 1.6, 0.004),
-                longitudeDelta: max((maxLon - minLon) * 1.6, 0.004)
-            )
-        )
-    }
-
-    // MARK: - Steps List
-
-    private var stepsList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Turn-by-turn")
-                .font(.headline)
-                .padding(.bottom, 8)
-
-            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                HStack(alignment: .top, spacing: 12) {
-                    // Step number with line
-                    VStack(spacing: 0) {
-                        ZStack {
-                            Circle()
-                                .fill(index == 0 ? Color.blue : Color(.systemGray4))
-                                .frame(width: 28, height: 28)
-                            Text("\(index + 1)")
-                                .font(.caption2.bold())
-                                .foregroundStyle(index == 0 ? .white : .primary)
-                        }
-                        if index < steps.count - 1 {
-                            Rectangle()
-                                .fill(Color(.systemGray4))
-                                .frame(width: 2)
-                                .frame(maxHeight: .infinity)
-                        }
-                    }
-                    .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(step.instructions)
-                            .font(.subheadline)
-                        if step.distance > 0 {
-                            Text(step.formattedDistance)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 8)
-
-                    Spacer()
-                }
-            }
-
-            // Arrival indicator
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "flag.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 28)
-
-                Text("Arrive at \(toStop.name)")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.green)
-                    .padding(.vertical, 8)
-            }
-        }
-    }
-
-    private var lastStopMessage: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "flag.checkered")
-                .font(.title)
-                .foregroundStyle(.green)
-            Text("This is the final stop on your tour!")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-    }
-
-    private var noDirectionsMessage: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "map.fill")
-                .font(.title)
-                .foregroundStyle(.secondary)
-            Text("Detailed directions aren't available for this segment. Head toward \(toStop.name) using the map above.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-    }
 }

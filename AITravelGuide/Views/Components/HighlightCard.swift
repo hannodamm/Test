@@ -56,26 +56,11 @@ struct HighlightCard: View {
     }
 
     private var categoryGradient: LinearGradient {
-        let color = categoryColor
+        let color = poi.category.swiftUIColor
         return LinearGradient(
             colors: [color, color.opacity(0.7)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-    }
-
-    private var categoryColor: Color {
-        switch poi.category {
-        case .landmark: return .orange
-        case .restaurant: return .red
-        case .museum: return .purple
-        case .park: return .green
-        case .shopping: return .pink
-        case .entertainment: return .blue
-        case .transit: return .cyan
-        case .hotel: return .indigo
-        case .historical: return .brown
-        case .viewpoint: return .teal
-        }
     }
 }

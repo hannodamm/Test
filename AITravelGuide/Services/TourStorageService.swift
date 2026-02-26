@@ -3,10 +3,12 @@ import Foundation
 @MainActor
 final class TourStorageService: ObservableObject {
     @Published var savedTours: [Tour] = []
+    @Published var tourHistory: [Tour] = []
     @Published var favoritePOIIds: Set<String> = []
 
     private let fileManager = FileManager.default
     private let favoritesKey = "favoritePOIIds"
+    private let historyLimit = 50
 
     private var toursDirectory: URL {
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -15,8 +17,16 @@ final class TourStorageService: ObservableObject {
         return dir
     }
 
+    private var historyDirectory: URL {
+        let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("TourHistory", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     init() {
         loadTours()
+        loadHistory()
         loadFavorites()
     }
 
@@ -50,6 +60,40 @@ final class TourStorageService: ObservableObject {
         ) else { return }
 
         savedTours = files
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> Tour? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(Tour.self, from: data)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    // MARK: - Tour History
+
+    func addToHistory(_ tour: Tour) {
+        let url = historyDirectory.appendingPathComponent("\(tour.id.uuidString).json")
+        do {
+            let data = try JSONEncoder().encode(tour)
+            try data.write(to: url)
+            // Avoid duplicates
+            tourHistory.removeAll { $0.id == tour.id }
+            tourHistory.insert(tour, at: 0)
+            // FIFO cleanup
+            while tourHistory.count > historyLimit {
+                let removed = tourHistory.removeLast()
+                let removeURL = historyDirectory.appendingPathComponent("\(removed.id.uuidString).json")
+                try? fileManager.removeItem(at: removeURL)
+            }
+        } catch {}
+    }
+
+    func loadHistory() {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: historyDirectory,
+            includingPropertiesForKeys: [.creationDateKey]
+        ) else { return }
+
+        tourHistory = files
             .filter { $0.pathExtension == "json" }
             .compactMap { url -> Tour? in
                 guard let data = try? Data(contentsOf: url) else { return nil }

@@ -26,7 +26,7 @@ struct POIAnnotationView: View {
             .font(.caption)
             .foregroundStyle(.white)
             .padding(8)
-            .background(colorForCategory, in: Circle())
+            .background(poi.category.swiftUIColor, in: Circle())
             .shadow(radius: 2)
     }
 
@@ -49,18 +49,4 @@ struct POIAnnotationView: View {
         .padding(.bottom, 4)
     }
 
-    private var colorForCategory: Color {
-        switch poi.category {
-        case .landmark: return .orange
-        case .restaurant: return .red
-        case .museum: return .purple
-        case .park: return .green
-        case .shopping: return .pink
-        case .entertainment: return .yellow
-        case .transit: return .blue
-        case .hotel: return .indigo
-        case .historical: return .brown
-        case .viewpoint: return .teal
-        }
-    }
 }
