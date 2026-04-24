@@ -6,6 +6,7 @@ import Combine
 final class LocationManager: NSObject, ObservableObject {
     @Published var currentLocation: CLLocation?
     @Published var currentPlacemark: CLPlacemark?
+    @Published var currentHeading: CLHeading?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var locationError: Error?
     @Published var isMonitoringRegions: Bool = false
@@ -22,7 +23,9 @@ final class LocationManager: NSObject, ObservableObject {
         clLocationManager.delegate = self
         clLocationManager.desiredAccuracy = kCLLocationAccuracyBest
         clLocationManager.distanceFilter = 10
-        clLocationManager.allowsBackgroundLocationUpdates = false
+        clLocationManager.allowsBackgroundLocationUpdates = true
+        clLocationManager.pausesLocationUpdatesAutomatically = false
+        clLocationManager.showsBackgroundLocationIndicator = true
         clLocationManager.activityType = .fitness
     }
 
@@ -36,6 +39,56 @@ final class LocationManager: NSObject, ObservableObject {
 
     func stopUpdatingLocation() {
         clLocationManager.stopUpdatingLocation()
+    }
+
+    // MARK: - Heading
+
+    func startUpdatingHeading() {
+        guard CLLocationManager.headingAvailable() else { return }
+        clLocationManager.headingFilter = 5
+        clLocationManager.startUpdatingHeading()
+    }
+
+    func stopUpdatingHeading() {
+        clLocationManager.stopUpdatingHeading()
+        currentHeading = nil
+    }
+
+    /// Human-readable direction from the user's current facing to a target coordinate.
+    /// Returns nil when location or heading is unavailable/unreliable (e.g. device flat).
+    func directionLabel(to target: CLLocationCoordinate2D) -> String? {
+        guard let origin = currentLocation?.coordinate,
+              let heading = currentHeading,
+              heading.headingAccuracy >= 0 else { return nil }
+
+        let facing = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+        guard facing >= 0 else { return nil }
+
+        let bearing = Self.bearing(from: origin, to: target)
+        var relative = bearing - facing
+        while relative > 180 { relative -= 360 }
+        while relative < -180 { relative += 360 }
+
+        switch abs(relative) {
+        case ..<30: return "ahead"
+        case 30..<120: return relative > 0 ? "on your right" : "on your left"
+        default: return "behind you"
+        }
+    }
+
+    private static func bearing(
+        from origin: CLLocationCoordinate2D,
+        to target: CLLocationCoordinate2D
+    ) -> CLLocationDirection {
+        let lat1 = origin.latitude * .pi / 180
+        let lat2 = target.latitude * .pi / 180
+        let dLon = (target.longitude - origin.longitude) * .pi / 180
+
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let radians = atan2(y, x)
+        let degrees = radians * 180 / .pi
+        return (degrees + 360).truncatingRemainder(dividingBy: 360)
     }
 
     func startMonitoringTourStops(_ stops: [TourStop], radius: CLLocationDistance = 50) {
@@ -167,6 +220,12 @@ extension LocationManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
         Task { @MainActor in
             self.enteredRegionId = region.identifier
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        Task { @MainActor in
+            self.currentHeading = newHeading
         }
     }
 }

@@ -1,4 +1,5 @@
 import AVFoundation
+import MediaPlayer
 import SwiftUI
 
 @MainActor
@@ -15,6 +16,18 @@ final class SpeechService: NSObject, ObservableObject {
     private var cachedNarrations: [String: String] = [:]
     private var preloadTasks: [String: Task<String?, Never>] = [:]
     private var currentTempFileURL: URL?
+
+    // Streaming narration state: while a stream is active, `isSpeaking` is held
+    // true across the queue of per-sentence utterances rather than bouncing on
+    // every `didFinish`.
+    private var streamingUtterancesInFlight = 0
+    private var streamingIsReceiving = false
+    private var streamingTask: Task<Void, Never>?
+
+    // Lock-screen / AirPods remote-command callbacks supplied by the tour view.
+    private var onRemoteNext: (() -> Void)?
+    private var onRemotePrevious: (() -> Void)?
+    private var remoteCommandsConfigured = false
 
     /// Reads voice-enabled preference from UserDefaults (toggled in Settings)
     var voiceEnabled: Bool {
@@ -50,8 +63,16 @@ final class SpeechService: NSObject, ObservableObject {
         super.init()
         delegateHandler = SpeechDelegateHandler { [weak self] in
             Task { @MainActor in
-                self?.isSpeaking = false
-                self?.isPaused = false
+                guard let self else { return }
+                if self.streamingUtterancesInFlight > 0 {
+                    self.streamingUtterancesInFlight -= 1
+                }
+                // Only clear speaking state once the stream has finished
+                // delivering chunks AND all queued utterances are done.
+                if !self.streamingIsReceiving && self.streamingUtterancesInFlight == 0 {
+                    self.isSpeaking = false
+                    self.isPaused = false
+                }
             }
         }
         synthesizer.delegate = delegateHandler
@@ -63,6 +84,70 @@ final class SpeechService: NSObject, ObservableObject {
                 self?.isUsingOpenAI = false
             }
         }
+
+        configureRemoteCommands()
+    }
+
+    // MARK: - Lock-screen / AirPods controls
+
+    /// Called once at init. Lock-screen controls need to be registered before
+    /// audio first plays, otherwise they won't appear on the first narration.
+    private func configureRemoteCommands() {
+        guard !remoteCommandsConfigured else { return }
+        remoteCommandsConfigured = true
+
+        let center = MPRemoteCommandCenter.shared()
+
+        center.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.resume() }
+            return .success
+        }
+        center.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.pause() }
+            return .success
+        }
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.isPaused { self.resume() } else if self.isSpeaking { self.pause() }
+            }
+            return .success
+        }
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.onRemoteNext?() }
+            return .success
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.onRemotePrevious?() }
+            return .success
+        }
+
+        center.nextTrackCommand.isEnabled = false
+        center.previousTrackCommand.isEnabled = false
+    }
+
+    /// Wire tour-navigation callbacks so AirPods triple-tap / lock-screen next
+    /// advances tour stops. Clears when callbacks are set to nil.
+    func setRemoteTourCallbacks(next: (() -> Void)?, previous: (() -> Void)?) {
+        onRemoteNext = next
+        onRemotePrevious = previous
+        let center = MPRemoteCommandCenter.shared()
+        center.nextTrackCommand.isEnabled = next != nil
+        center.previousTrackCommand.isEnabled = previous != nil
+    }
+
+    /// Publish what the user is listening to on the lock screen and Control Center.
+    func updateNowPlaying(title: String, subtitle: String?) {
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0
+        ]
+        if let subtitle { info[MPMediaItemPropertyArtist] = subtitle }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    func clearNowPlaying() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: - Public API
@@ -101,6 +186,10 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     func stop() {
+        streamingTask?.cancel()
+        streamingTask = nil
+        streamingIsReceiving = false
+        streamingUtterancesInFlight = 0
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -220,6 +309,62 @@ final class SpeechService: NSObject, ObservableObject {
         speak(parts.joined(separator: " ... "))
     }
 
+    /// Consume a sentence-chunk stream and enqueue each chunk as its own
+    /// AVSpeechUtterance. AVSpeechSynthesizer queues utterances natively with
+    /// imperceptible gap, so the listener hears continuous narration.
+    /// Streaming forces the AVSpeech path — the OpenAI TTS route is incompatible
+    /// with per-sentence streaming without per-sentence round-trips.
+    func speakStreaming(
+        _ stream: AsyncThrowingStream<String, Error>,
+        fallbackText: String?
+    ) async {
+        stop()
+        guard voiceEnabled else { return }
+
+        streamingIsReceiving = true
+        streamingUtterancesInFlight = 0
+        isUsingOpenAI = false
+        isSpeaking = true
+        isPaused = false
+
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        try? AVAudioSession.sharedInstance().setActive(true)
+
+        do {
+            for try await chunk in stream {
+                enqueueStreamedUtterance(chunk)
+            }
+            streamingIsReceiving = false
+            // No chunks arrived at all — fall back to a one-shot narration.
+            if streamingUtterancesInFlight == 0, let fallback = fallbackText {
+                speakWithAVSpeech(fallback)
+            } else if streamingUtterancesInFlight == 0 {
+                isSpeaking = false
+            }
+        } catch {
+            streamingIsReceiving = false
+            // Stream failed before any audio played — fall back.
+            if streamingUtterancesInFlight == 0, let fallback = fallbackText {
+                speakWithAVSpeech(fallback)
+            } else if streamingUtterancesInFlight == 0 {
+                isSpeaking = false
+            }
+            // If some utterances already queued, let them play out and stop there.
+        }
+    }
+
+    private func enqueueStreamedUtterance(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = speechRateValue
+        utterance.pitchMultiplier = 1.0
+        utterance.preUtteranceDelay = 0
+        utterance.postUtteranceDelay = 0.15
+        utterance.volume = 0.9
+        utterance.voice = preferredVoice
+        streamingUtterancesInFlight += 1
+        synthesizer.speak(utterance)
+    }
+
     /// Preload narration text for a stop (call while user reviews tour preview)
     func preloadStopNarration(_ stop: TourStop, tour: Tour?) async {
         guard APIKeyManager.shared.hasAPIKey else { return }
@@ -252,9 +397,12 @@ final class SpeechService: NSObject, ObservableObject {
         preloadTasks.removeAll()
     }
 
-    /// AI-powered narration with fallback to template text
+    /// AI-powered narration with fallback to template text. When an API key is
+    /// set and no preloaded cache hit exists, streams narration from Claude so
+    /// the first audio lands in ~500ms instead of 2–5 s.
     func speakStopNarration(_ stop: TourStop, tour: Tour?) async {
         let persona = tour?.guidePersona
+        updateNowPlaying(title: stop.name, subtitle: stopSubtitle(stop, tour: tour))
 
         // Use cached narration if available (preloaded during preview)
         if let cached = cachedNarrations[stop.name] {
@@ -262,7 +410,7 @@ final class SpeechService: NSObject, ObservableObject {
             return
         }
 
-        // If a preload is in progress, await it instead of speaking filler
+        // If a preload is in progress, await it instead of streaming a second time
         if let preloadTask = preloadTasks[stop.name] {
             if let narration = await preloadTask.value {
                 cachedNarrations[stop.name] = narration
@@ -272,23 +420,37 @@ final class SpeechService: NSObject, ObservableObject {
         }
 
         if APIKeyManager.shared.hasAPIKey {
-            // Speak a short intro while waiting for AI narration
-            speak("Let me tell you about \(stop.name).")
-
             let context = buildMinimalContext(stop: stop, tour: tour)
             let claudeAPI = ClaudeAPIService()
-            if let narration = await claudeAPI.narrateStop(
+            let fallback = templateNarration(for: stop, persona: persona)
+
+            if let stream = claudeAPI.streamNarrateStop(
                 stop: stop,
                 locationContext: context,
                 guidePersona: persona
             ) {
-                speak(narration)
+                await speakStreaming(stream, fallbackText: fallback)
                 return
             }
         }
 
-        // Fallback to template narration
+        // No API key — fall back to the template narration.
         speakStopDescription(stop, guidePersona: persona)
+    }
+
+    private func stopSubtitle(_ stop: TourStop, tour: Tour?) -> String? {
+        guard let tour,
+              let idx = tour.stops.firstIndex(where: { $0.id == stop.id }) else { return nil }
+        return "Stop \(idx + 1) of \(tour.stops.count) · \(tour.name)"
+    }
+
+    private func templateNarration(for stop: TourStop, persona: GuidePersona?) -> String {
+        var parts: [String] = []
+        parts.append(persona != nil ? "So, this is \(stop.name)." : "Welcome to \(stop.name).")
+        parts.append(stop.description)
+        if let note = stop.historicalNote { parts.append("Here's something interesting. \(note)") }
+        if let tip = stop.tips { parts.append("One more thing. \(tip)") }
+        return parts.joined(separator: " ... ")
     }
 
     private func buildMinimalContext(stop: TourStop, tour: Tour?) -> LocationContext {
@@ -317,17 +479,38 @@ final class SpeechService: NSObject, ObservableObject {
         speak(text)
     }
 
-    func speakArrival(at stop: TourStop, persona: GuidePersona? = nil) {
+    func speakArrival(at stop: TourStop, persona: GuidePersona? = nil, direction: String? = nil) {
         if let persona {
-            let phrases = [
-                "Here we are — \(stop.name)!",
-                "And this is \(stop.name).",
-                "Alright, we've made it to \(stop.name)!",
-                "Welcome to \(stop.name)."
-            ]
+            let phrases: [String]
+            if let direction, direction == "ahead" {
+                phrases = [
+                    "Right ahead — \(stop.name)!",
+                    "And here we are, \(stop.name) — right in front of you.",
+                    "You made it — \(stop.name) is right ahead."
+                ]
+            } else if let direction {
+                phrases = [
+                    "Here we are — \(stop.name), \(direction).",
+                    "And this is \(stop.name), \(direction).",
+                    "\(stop.name), \(direction) — we made it."
+                ]
+            } else {
+                phrases = [
+                    "Here we are — \(stop.name)!",
+                    "And this is \(stop.name).",
+                    "Alright, we've made it to \(stop.name)!",
+                    "Welcome to \(stop.name)."
+                ]
+            }
             speak(phrases.randomElement()!)
         } else {
-            speak("You've arrived at \(stop.name). Let me tell you about this place.")
+            if let direction, direction == "ahead" {
+                speak("You've arrived at \(stop.name), right ahead. Let me tell you about this place.")
+            } else if let direction {
+                speak("You've arrived at \(stop.name), \(direction). Let me tell you about this place.")
+            } else {
+                speak("You've arrived at \(stop.name). Let me tell you about this place.")
+            }
         }
     }
 
@@ -340,23 +523,51 @@ final class SpeechService: NSObject, ObservableObject {
         speak(text)
     }
 
-    func speakApproachTeaser(for stop: TourStop, persona: GuidePersona? = nil) {
+    func speakApproachTeaser(for stop: TourStop, persona: GuidePersona? = nil, direction: String? = nil) {
         // Don't interrupt an in-progress narration
         guard !isSpeaking && !isPaused else { return }
 
         let templates: [String]
         if persona != nil {
-            templates = [
-                "Coming up ahead is \(stop.name).",
-                "We're almost at \(stop.name). You're going to like this one.",
-                "Just a bit further — \(stop.name) is right ahead."
-            ]
+            if let direction, direction == "ahead" {
+                templates = [
+                    "Coming up ahead is \(stop.name).",
+                    "We're almost at \(stop.name) — right ahead.",
+                    "Just a bit further — \(stop.name) is straight ahead."
+                ]
+            } else if let direction {
+                templates = [
+                    "\(stop.name) is coming up \(direction).",
+                    "Keep an eye out — \(stop.name) is \(direction).",
+                    "Almost there — \(stop.name) is \(direction)."
+                ]
+            } else {
+                templates = [
+                    "Coming up ahead is \(stop.name).",
+                    "We're almost at \(stop.name). You're going to like this one.",
+                    "Just a bit further — \(stop.name) is right ahead."
+                ]
+            }
         } else {
-            templates = [
-                "Coming up ahead is \(stop.name).",
-                "You're approaching \(stop.name).",
-                "Almost there — \(stop.name) is just ahead."
-            ]
+            if let direction, direction == "ahead" {
+                templates = [
+                    "Coming up ahead is \(stop.name).",
+                    "You're approaching \(stop.name), right ahead.",
+                    "\(stop.name) is straight ahead."
+                ]
+            } else if let direction {
+                templates = [
+                    "\(stop.name) is coming up \(direction).",
+                    "You're approaching \(stop.name), \(direction).",
+                    "Look \(direction) — \(stop.name) is just ahead."
+                ]
+            } else {
+                templates = [
+                    "Coming up ahead is \(stop.name).",
+                    "You're approaching \(stop.name).",
+                    "Almost there — \(stop.name) is just ahead."
+                ]
+            }
         }
 
         var text = templates.randomElement()!

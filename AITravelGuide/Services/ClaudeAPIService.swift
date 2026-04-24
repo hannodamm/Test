@@ -9,7 +9,7 @@ final class ClaudeAPIService: ObservableObject {
     @Published var lastError: String?
 
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
-    private let model = "claude-sonnet-4-5-20250929"
+    private let model = "claude-sonnet-4-6"
     private let maxTokens = 1024
     private let requestTimeout: TimeInterval = 15
 
@@ -51,6 +51,78 @@ final class ClaudeAPIService: ObservableObject {
             return nil
         }
 
+        let (system, messages) = buildStopNarrationPrompt(
+            stop: stop,
+            locationContext: locationContext,
+            guidePersona: guidePersona
+        )
+
+        do {
+            return try await callAPI(apiKey: apiKey, system: system, messages: messages)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Streaming variant of `narrateStop`. Emits sentence-sized chunks as Claude
+    /// generates them, so the first audio can start within ~500ms instead of
+    /// waiting for the full ~150-word response. Returns nil when no API key is set.
+    func streamNarrateStop(
+        stop: TourStop,
+        locationContext: LocationContext,
+        guidePersona: GuidePersona? = nil
+    ) -> AsyncThrowingStream<String, Error>? {
+        guard let apiKey = APIKeyManager.shared.claudeAPIKey, !apiKey.isEmpty else {
+            return nil
+        }
+
+        let (system, messages) = buildStopNarrationPrompt(
+            stop: stop,
+            locationContext: locationContext,
+            guidePersona: guidePersona
+        )
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var request = URLRequest(url: apiURL, timeoutInterval: requestTimeout)
+                    request.httpMethod = "POST"
+                    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                    request.setValue("application/json", forHTTPHeaderField: "content-type")
+
+                    let body = APIRequest(
+                        model: model,
+                        max_tokens: maxTokens,
+                        system: system,
+                        messages: messages,
+                        stream: true
+                    )
+                    request.httpBody = try JSONEncoder().encode(body)
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                        throw APIError.httpError(code)
+                    }
+
+                    for try await chunk in ClaudeStreamParser.sentences(from: bytes.lines) {
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func buildStopNarrationPrompt(
+        stop: TourStop,
+        locationContext: LocationContext,
+        guidePersona: GuidePersona?
+    ) -> (system: String, messages: [APIMessage]) {
         var systemParts: [String] = []
         if let persona = guidePersona {
             systemParts.append("You are \(persona.name), a travel guide with this style: \(persona.voiceStyle).")
@@ -74,15 +146,8 @@ final class ClaudeAPIService: ObservableObject {
         if let tip = stop.tips { userParts.append("Tip: \(tip)") }
         if let narration = stop.walkingNarration { userParts.append("Walking narration context: \(narration)") }
 
-        let userContent = userParts.joined(separator: "\n")
-
-        let messages = [APIMessage(role: "user", content: userContent)]
-
-        do {
-            return try await callAPI(apiKey: apiKey, system: system, messages: messages)
-        } catch {
-            return nil
-        }
+        let messages = [APIMessage(role: "user", content: userParts.joined(separator: "\n"))]
+        return (system, messages)
     }
 
     /// Generate highlight descriptions for a point of interest.
@@ -259,6 +324,15 @@ private struct APIRequest: Encodable {
     let max_tokens: Int
     let system: String
     let messages: [APIMessage]
+    let stream: Bool?
+
+    init(model: String, max_tokens: Int, system: String, messages: [APIMessage], stream: Bool? = nil) {
+        self.model = model
+        self.max_tokens = max_tokens
+        self.system = system
+        self.messages = messages
+        self.stream = stream
+    }
 }
 
 struct APIMessage: Codable {

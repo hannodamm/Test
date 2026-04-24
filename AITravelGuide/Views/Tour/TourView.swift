@@ -468,6 +468,11 @@ struct TourView: View {
                         if let stops = tourViewModel.currentTour?.stops {
                             locationManager.startMonitoringTourStops(stops)
                         }
+                        locationManager.startUpdatingHeading()
+                        speechService.setRemoteTourCallbacks(
+                            next: { [weak tourViewModel] in tourViewModel?.advanceToNextStop() },
+                            previous: { [weak tourViewModel] in tourViewModel?.goToPreviousStop() }
+                        )
                         // Auto-narrate first stop
                         if let firstStop = tourViewModel.currentStop {
                             Task { await speechService.speakStopNarration(firstStop, tour: tourViewModel.currentTour) }
@@ -579,7 +584,8 @@ struct TourView: View {
         }
         .onChange(of: tourViewModel.arrivedAtStop) { _, arrived in
             if arrived, let stop = tourViewModel.currentStop {
-                speechService.speakArrival(at: stop, persona: tour.guidePersona)
+                let direction = locationManager.directionLabel(to: stop.coordinate)
+                speechService.speakArrival(at: stop, persona: tour.guidePersona, direction: direction)
                 Task {
                     try? await Task.sleep(for: .seconds(2))
                     await speechService.speakStopNarration(stop, tour: tourViewModel.currentTour)
@@ -594,7 +600,8 @@ struct TourView: View {
         }
         .onChange(of: tourViewModel.approachingNextStop) { _, approaching in
             if approaching, let nextStop = tourViewModel.nextStop {
-                speechService.speakApproachTeaser(for: nextStop, persona: tour.guidePersona)
+                let direction = locationManager.directionLabel(to: nextStop.coordinate)
+                speechService.speakApproachTeaser(for: nextStop, persona: tour.guidePersona, direction: direction)
             }
         }
         .onAppear { cachedDiscoveryPoints = discoveryPointsForMap }
@@ -865,7 +872,10 @@ struct TourView: View {
             Button("End Tour & Rate", role: .destructive) {
                 speechService.stop()
                 speechService.clearNarrationCache()
+                speechService.setRemoteTourCallbacks(next: nil, previous: nil)
+                speechService.clearNowPlaying()
                 locationManager.stopMonitoringAllRegions()
+                locationManager.stopUpdatingHeading()
                 tourStorageService.saveTour(tour)
                 showRating = true
                 tourViewModel.endTour()
@@ -873,7 +883,10 @@ struct TourView: View {
             Button("End Tour", role: .destructive) {
                 speechService.stop()
                 speechService.clearNarrationCache()
+                speechService.setRemoteTourCallbacks(next: nil, previous: nil)
+                speechService.clearNowPlaying()
                 locationManager.stopMonitoringAllRegions()
+                locationManager.stopUpdatingHeading()
                 tourStorageService.saveTour(tour)
                 tourViewModel.endTour()
             }
