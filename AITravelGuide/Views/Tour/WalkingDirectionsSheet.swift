@@ -40,6 +40,10 @@ struct WalkingDirectionsSheet: View {
                     } else {
                         noDirectionsMessage
                     }
+
+                    if !isLastStop {
+                        externalMapsSection
+                    }
                 }
                 .padding()
             }
@@ -265,5 +269,50 @@ struct WalkingDirectionsSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
+    }
+
+    // MARK: - External Maps
+
+    private var externalMapsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Open in")
+                .font(.headline)
+            HStack(spacing: 12) {
+                Button {
+                    openInAppleMaps()
+                } label: {
+                    Label("Apple Maps", systemImage: "map")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    openInGoogleMaps()
+                } label: {
+                    Label("Google Maps", systemImage: "globe")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func openInAppleMaps() {
+        let destination = toStop.coordinate
+        // Universal Apple Maps URL — opens the native app on iOS, web on other platforms.
+        let urlString = "https://maps.apple.com/?daddr=\(destination.latitude),\(destination.longitude)&dirflg=w"
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func openInGoogleMaps() {
+        let destination = toStop.coordinate
+        // Universal Google Maps URL — deep-links into the Google Maps app if
+        // installed, otherwise opens in the default browser.
+        let urlString = "https://www.google.com/maps/dir/?api=1&destination=\(destination.latitude),\(destination.longitude)&travelmode=walking"
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
     }
 }

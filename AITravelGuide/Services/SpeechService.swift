@@ -43,20 +43,32 @@ final class SpeechService: NSObject, ObservableObject {
         }
     }
 
-    /// Finds the best available English voice, preferring premium > enhanced > default
+    /// Finds the best available voice in the user's preferred language,
+    /// preferring premium > enhanced > default. Falls back to any voice in
+    /// the same language prefix, and finally to the locale's default voice.
     private var preferredVoice: AVSpeechSynthesisVoice? {
         if let cached = cachedVoice { return cached }
 
-        let voices = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix("en") }
+        let language = GuidePreferences.currentLanguage
+        let prefix = String(language.speechCode.prefix(2)) // "en-US" -> "en"
 
-        // Try premium first, then enhanced, then fall back to default en-US
-        let voice = voices.first(where: { $0.quality == .premium })
-            ?? voices.first(where: { $0.quality == .enhanced })
-            ?? AVSpeechSynthesisVoice(language: "en-US")
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix(prefix) }
 
-        cachedVoice = voice
-        return voice
+        if let premium = voices.first(where: { $0.quality == .premium }) {
+            cachedVoice = premium
+            return premium
+        }
+        if let enhanced = voices.first(where: { $0.quality == .enhanced }) {
+            cachedVoice = enhanced
+            return enhanced
+        }
+        if let any = voices.first {
+            cachedVoice = any
+            return any
+        }
+        let fallback = AVSpeechSynthesisVoice(language: language.speechCode)
+        cachedVoice = fallback
+        return fallback
     }
 
     override init() {

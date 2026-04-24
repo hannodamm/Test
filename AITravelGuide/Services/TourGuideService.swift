@@ -16,7 +16,7 @@ final class TourGuideService: ObservableObject {
         near coordinate: CLLocationCoordinate2D,
         placemark: CLPlacemark?,
         category: TourCategory = .general,
-        numberOfStops: Int = 5
+        numberOfStops: Int? = nil
     ) async -> Tour? {
         isGeneratingTour = true
         defer { isGeneratingTour = false }
@@ -28,7 +28,7 @@ final class TourGuideService: ObservableObject {
             }
         }
 
-        // Route curated categories to template-based generation
+        // Route curated categories to template-based generation — they have fixed stops.
         if category.isCurated {
             if let tour = await generateCuratedTour(
                 coordinate: coordinate,
@@ -40,13 +40,20 @@ final class TourGuideService: ObservableObject {
             }
         }
 
+        // Resolve stop count from user's duration preference when not explicitly specified.
+        let duration = GuidePreferences.currentDuration
+        let resolvedStopCount = numberOfStops ?? duration.stopCount.upperBound
+        let radiusMeters = GuidePreferences.currentRadiusMeters
+
         // AI-first approach: Ask Claude to design the tour, then geocode the stops
         if APIKeyManager.shared.hasAPIKey {
             if let tour = await generateAIDesignedTour(
                 coordinate: coordinate,
                 locationName: locationName,
                 category: category,
-                numberOfStops: numberOfStops
+                numberOfStops: resolvedStopCount,
+                durationMinutes: duration.rawValue,
+                radiusMeters: radiusMeters
             ) {
                 self.currentTour = tour
                 return tour
@@ -58,7 +65,7 @@ final class TourGuideService: ObservableObject {
             coordinate: coordinate,
             locationName: locationName,
             category: category,
-            numberOfStops: numberOfStops
+            numberOfStops: resolvedStopCount
         )
     }
 
@@ -148,7 +155,7 @@ final class TourGuideService: ObservableObject {
             centerCoordinate: coordinate,
             locationName: locationName,
             narrativeThread: template.narrativeThread,
-            guidePersona: template.guidePersona,
+            guidePersona: GuidePreferences.selectedPersona ?? template.guidePersona,
             templateId: template.id
         )
     }
@@ -208,7 +215,10 @@ final class TourGuideService: ObservableObject {
         }
         """
 
-        let system = "You are a charismatic tour guide. Respond only with valid JSON."
+        var systemParts = ["You are a charismatic tour guide. Respond only with valid JSON."]
+        let modifier = GuidePreferences.systemPromptModifier
+        if !modifier.isEmpty { systemParts.append(modifier) }
+        let system = systemParts.joined(separator: " ")
         let messages = [APIMessage(role: "user", content: prompt)]
 
         do {
@@ -270,7 +280,9 @@ final class TourGuideService: ObservableObject {
         coordinate: CLLocationCoordinate2D,
         locationName: String,
         category: TourCategory,
-        numberOfStops: Int
+        numberOfStops: Int,
+        durationMinutes: Int,
+        radiusMeters: Double
     ) async -> Tour? {
         guard let apiKey = APIKeyManager.shared.claudeAPIKey, !apiKey.isEmpty else {
             return nil
@@ -287,13 +299,19 @@ final class TourGuideService: ObservableObject {
         default: timeOfDay = "night"
         }
 
+        let radiusString: String = {
+            if radiusMeters < 1000 { return "\(Int(radiusMeters)) meters" }
+            return String(format: "%.1f km", radiusMeters / 1000)
+        }()
+
         let prompt = """
         Design a \(category.rawValue) walking tour in \(locationName) \
         (near \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))).
         It's currently \(timeOfDay) — tailor tips, atmosphere descriptions, and recommendations accordingly.
 
+        Target duration: about \(durationMinutes) minutes total, walking at a relaxed pace.
         Pick \(numberOfStops) real, specific places that a knowledgeable local guide would recommend. \
-        They should be within walking distance of each other (roughly 2km total) and ordered as a logical walking route.
+        They should all lie within a \(radiusString) walking radius of the starting coordinate and be ordered as a logical walking route, so the total walking distance stays comfortable for the target duration.
 
         IMPORTANT - What to include for this \(category.rawValue) tour:
         \(categoryGuidance)
@@ -315,7 +333,14 @@ final class TourGuideService: ObservableObject {
               "name": "The actual, real name of this place",
               "searchQuery": "A precise search query to find this place on Apple Maps (e.g. 'Marienplatz Munich' or 'English Garden Munich')",
               "description": "A vivid 2-3 sentence description written as spoken narration — use directions like 'Look to your left...', 'Notice the...', 'As you face the entrance...'",
-              "historicalNote": "A specific historical fact or story about this place, or null if not relevant",
+              "historicalFacts": [
+                {
+                  "year": "YYYY or a range like '1680s', or null if not applicable",
+                  "title": "Short fact title (3-6 words)",
+                  "content": "A vivid 1-2 sentence fact",
+                  "category": "one of: general | architecture | culture | event | famous | legend | art | nature"
+                }
+              ],
               "tip": "A practical insider tip (best time to visit, what to look for, where to stand, what to order, etc.)",
               "durationMinutes": 15,
               "iconType": "landmark",
@@ -343,13 +368,24 @@ final class TourGuideService: ObservableObject {
         - Each stop MUST have 2-3 discoveryPoints with a REQUIRED searchQuery for each — things to notice on the walk between stops
         - discoveryPoints searchQuery must be specific enough to locate on a map (e.g. 'Palazzo della Ragione Milan', not just 'old building')
         - walkingNarration should be null for the first stop
+        - historicalFacts should have 2-4 facts per stop, each categorized correctly and with a year when known. Mix categories (e.g. one architecture fact, one famous person fact, one legend) rather than all in the same category.
         """
 
-        let system = """
-        You are an expert local travel guide for \(locationName) who designs unforgettable walking tours. \
-        You know the best spots, hidden gems, and the stories behind every place. \
-        Respond only with valid JSON, no markdown formatting.
-        """
+        var systemParts = [
+            """
+            You are an expert local travel guide for \(locationName) who designs unforgettable walking tours. \
+            You know the best spots, hidden gems, and the stories behind every place. \
+            Respond only with valid JSON, no markdown formatting.
+            """
+        ]
+        let aiModifier = GuidePreferences.systemPromptModifier
+        if !aiModifier.isEmpty { systemParts.append(aiModifier) }
+        if let userPersona = GuidePreferences.selectedPersona {
+            systemParts.append(
+                "The tour's guide character is fixed: \(userPersona.name), \(userPersona.tagline). Voice style: \(userPersona.voiceStyle). Write the tour name, description, and every stop description in that voice. In the JSON guidePersona field, echo back exactly: name=\"\(userPersona.name)\", tagline=\"\(userPersona.tagline)\", voiceStyle=\"\(userPersona.voiceStyle)\", greeting=\"\(userPersona.greeting)\", signoff=\"\(userPersona.signoff)\"."
+            )
+        }
+        let system = systemParts.joined(separator: "\n\n")
         let messages = [APIMessage(role: "user", content: prompt)]
 
         do {
@@ -386,7 +422,8 @@ final class TourGuideService: ObservableObject {
                     coordinate: resolvedCoord,
                     orderIndex: index,
                     durationMinutes: aiStop.durationMinutes,
-                    historicalNote: aiStop.historicalNote,
+                    historicalNote: aiStop.historicalFacts.first?.content,
+                    historicalFacts: aiStop.historicalFacts.isEmpty ? nil : aiStop.historicalFacts,
                     tips: aiStop.tip,
                     imageSystemName: iconForType(aiStop.iconType),
                     walkingNarration: aiStop.walkingNarration,
@@ -420,7 +457,7 @@ final class TourGuideService: ObservableObject {
                 centerCoordinate: coordinate,
                 locationName: locationName,
                 narrativeThread: aiTour.narrativeThread,
-                guidePersona: aiTour.guidePersona
+                guidePersona: GuidePreferences.selectedPersona ?? aiTour.guidePersona
             )
         } catch {
             return nil
@@ -470,7 +507,7 @@ final class TourGuideService: ObservableObject {
         let name: String
         let searchQuery: String
         let description: String
-        let historicalNote: String?
+        let historicalFacts: [HistoricalFact]
         let tip: String?
         let durationMinutes: Int
         let iconType: String
@@ -515,12 +552,20 @@ final class TourGuideService: ObservableObject {
             let name: String
             let searchQuery: String
             let description: String
-            let historicalNote: String?
+            let historicalNote: String?   // Legacy single-string form (kept for compat)
+            let historicalFacts: [HistoricalFactJSON]?
             let tip: String?
             let durationMinutes: Int?
             let iconType: String?
             let walkingNarration: String?
             let discoveryPoints: [DiscoveryPointJSON]?
+        }
+
+        struct HistoricalFactJSON: Decodable {
+            let year: String?
+            let title: String
+            let content: String
+            let category: String?
         }
 
         struct DiscoveryPointJSON: Decodable {
@@ -557,11 +602,26 @@ final class TourGuideService: ObservableObject {
                         iconSystemName: dp.iconSystemName
                     )
                 }
+
+                // Prefer the new structured facts array; fall back to synthesizing
+                // one fact from the legacy historicalNote if that's all we got.
+                var facts: [HistoricalFact] = (stop.historicalFacts ?? []).map { f in
+                    HistoricalFact(
+                        year: f.year,
+                        title: f.title,
+                        content: f.content,
+                        category: FactCategory(rawValue: f.category ?? "general") ?? .general
+                    )
+                }
+                if facts.isEmpty, let note = stop.historicalNote, !note.isEmpty {
+                    facts = [HistoricalFact(title: "Historical Note", content: note, category: .general)]
+                }
+
                 return AIDesignedStop(
                     name: stop.name,
                     searchQuery: stop.searchQuery,
                     description: stop.description,
-                    historicalNote: stop.historicalNote,
+                    historicalFacts: facts,
                     tip: stop.tip,
                     durationMinutes: stop.durationMinutes ?? 10,
                     iconType: stop.iconType ?? "landmark",

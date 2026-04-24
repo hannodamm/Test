@@ -32,6 +32,65 @@ struct DiscoveryPoint: Identifiable, Codable, Equatable {
     }
 }
 
+enum FactCategory: String, Codable, CaseIterable, Hashable {
+    case general
+    case architecture
+    case culture
+    case event
+    case famous
+    case legend
+    case art
+    case nature
+
+    var displayName: String {
+        switch self {
+        case .general:      return "General"
+        case .architecture: return "Architecture"
+        case .culture:      return "Culture"
+        case .event:        return "Event"
+        case .famous:       return "Famous"
+        case .legend:       return "Legend"
+        case .art:          return "Art"
+        case .nature:       return "Nature"
+        }
+    }
+
+    var iconSystemName: String {
+        switch self {
+        case .general:      return "book.fill"
+        case .architecture: return "building.columns.fill"
+        case .culture:      return "theatermasks.fill"
+        case .event:        return "calendar"
+        case .famous:       return "star.fill"
+        case .legend:       return "sparkles"
+        case .art:          return "paintpalette.fill"
+        case .nature:       return "leaf.fill"
+        }
+    }
+}
+
+struct HistoricalFact: Identifiable, Codable, Hashable {
+    let id: UUID
+    var year: String?
+    var title: String
+    var content: String
+    var category: FactCategory
+
+    init(
+        id: UUID = UUID(),
+        year: String? = nil,
+        title: String,
+        content: String,
+        category: FactCategory = .general
+    ) {
+        self.id = id
+        self.year = year
+        self.title = title
+        self.content = content
+        self.category = category
+    }
+}
+
 struct TourStop: Identifiable, Codable {
     let id: UUID
     var name: String
@@ -41,6 +100,7 @@ struct TourStop: Identifiable, Codable {
     var orderIndex: Int
     var durationMinutes: Int
     var historicalNote: String?
+    var historicalFacts: [HistoricalFact]?
     var tips: String?
     var imageSystemName: String
     var walkingNarration: String?
@@ -48,6 +108,20 @@ struct TourStop: Identifiable, Codable {
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    /// Unified fact list for UI and narration. When a tour carries structured
+    /// historicalFacts, those are returned verbatim. Otherwise, if a legacy
+    /// historicalNote string exists, it's surfaced as a single .general fact
+    /// so old saved tours and curated templates still render in the new UI.
+    var effectiveFacts: [HistoricalFact] {
+        if let facts = historicalFacts, !facts.isEmpty {
+            return facts
+        }
+        if let note = historicalNote, !note.isEmpty {
+            return [HistoricalFact(title: "Historical Note", content: note, category: .general)]
+        }
+        return []
     }
 
     init(
@@ -58,6 +132,7 @@ struct TourStop: Identifiable, Codable {
         orderIndex: Int,
         durationMinutes: Int = 10,
         historicalNote: String? = nil,
+        historicalFacts: [HistoricalFact]? = nil,
         tips: String? = nil,
         imageSystemName: String = "mappin.circle.fill",
         walkingNarration: String? = nil,
@@ -71,6 +146,7 @@ struct TourStop: Identifiable, Codable {
         self.orderIndex = orderIndex
         self.durationMinutes = durationMinutes
         self.historicalNote = historicalNote
+        self.historicalFacts = historicalFacts
         self.tips = tips
         self.imageSystemName = imageSystemName
         self.walkingNarration = walkingNarration
@@ -88,6 +164,7 @@ struct TourStop: Identifiable, Codable {
         orderIndex = try container.decode(Int.self, forKey: .orderIndex)
         durationMinutes = try container.decode(Int.self, forKey: .durationMinutes)
         historicalNote = try container.decodeIfPresent(String.self, forKey: .historicalNote)
+        historicalFacts = try container.decodeIfPresent([HistoricalFact].self, forKey: .historicalFacts)
         tips = try container.decodeIfPresent(String.self, forKey: .tips)
         imageSystemName = try container.decodeIfPresent(String.self, forKey: .imageSystemName) ?? "mappin.circle.fill"
         walkingNarration = try container.decodeIfPresent(String.self, forKey: .walkingNarration)

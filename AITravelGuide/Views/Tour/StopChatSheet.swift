@@ -134,7 +134,8 @@ struct StopChatSheet: View {
                     nearbyPOIs: [],
                     currentTour: tour
                 )
-                let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). \(stop.historicalNote ?? "") My question: \(text)"
+                let factsBlock = stop.effectiveFacts.map { "\($0.title): \($0.content)" }.joined(separator: " | ")
+                let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). Facts about this stop: \(factsBlock) My question: \(text)"
                 response = await claudeAPI.ask(
                     question: enrichedQuestion,
                     conversationHistory: messages,

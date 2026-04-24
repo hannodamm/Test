@@ -42,6 +42,8 @@
 		A10000010000000000000035 /* TourSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000035; };
 		A10000010000000000000036 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000036; };
 		A10000010000000000000037 /* ClaudeStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000037; };
+		A10000010000000000000038 /* GuidePreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000038; };
+		A10000010000000000000039 /* HistoricalFactsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000039; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +85,8 @@
 		A20000010000000000000035 /* TourSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourSupportingViews.swift; sourceTree = "<group>"; };
 		A20000010000000000000036 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A20000010000000000000037 /* ClaudeStreamParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeStreamParser.swift; sourceTree = "<group>"; };
+		A20000010000000000000038 /* GuidePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidePreferences.swift; sourceTree = "<group>"; };
+		A20000010000000000000039 /* HistoricalFactsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoricalFactsPanel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +145,7 @@
 				A20000010000000000000024 /* APIKeyManager.swift */,
 				A20000010000000000000025 /* ClaudeAPIService.swift */,
 				A20000010000000000000037 /* ClaudeStreamParser.swift */,
+				A20000010000000000000038 /* GuidePreferences.swift */,
 				A20000010000000000000027 /* SpeechService.swift */,
 				A20000010000000000000028 /* TourStorageService.swift */,
 				A20000010000000000000029 /* MilanTourTemplates.swift */,
@@ -182,6 +187,7 @@
 				A20000010000000000000015 /* POIAnnotationView.swift */,
 				A20000010000000000000016 /* ChatBubble.swift */,
 				A20000010000000000000020 /* HighlightCard.swift */,
+				A20000010000000000000039 /* HistoricalFactsPanel.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -315,6 +321,8 @@
 				A10000010000000000000035 /* TourSupportingViews.swift in Sources */,
 				A10000010000000000000036 /* Theme.swift in Sources */,
 				A10000010000000000000037 /* ClaudeStreamParser.swift in Sources */,
+				A10000010000000000000038 /* GuidePreferences.swift in Sources */,
+				A10000010000000000000039 /* HistoricalFactsPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

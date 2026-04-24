@@ -18,6 +18,11 @@ struct SettingsView: View {
 
     @AppStorage("voiceEnabled") private var voiceEnabled = true
     @AppStorage("speechRateIndex") private var speechRateIndex = 1 // 0=slow, 1=normal, 2=fast
+    @AppStorage(GuidePreferences.Key.language) private var preferredLanguage: String = "en"
+    @AppStorage(GuidePreferences.Key.isKidFriendly) private var isKidFriendly: Bool = false
+    @AppStorage(GuidePreferences.Key.tourDurationMinutes) private var tourDurationMinutes: Int = GuidePreferences.TourDuration.half.rawValue
+    @AppStorage(GuidePreferences.Key.tourRadiusMeters) private var tourRadiusMeters: Double = 1500
+    @AppStorage(GuidePreferences.Key.personaId) private var personaId: String = GuidePreferences.autoPersonaId
 
     var body: some View {
         NavigationStack {
@@ -36,6 +41,65 @@ struct SettingsView: View {
                     Text("OpenAI API Key")
                 } footer: {
                     Text("Used for natural-sounding voice narration. Get a key at platform.openai.com")
+                }
+
+                Section {
+                    Picker("Language", selection: $preferredLanguage) {
+                        ForEach(GuidePreferences.supportedLanguages) { language in
+                            Text(language.displayName).tag(language.id)
+                        }
+                    }
+                    .onChange(of: preferredLanguage) { _, _ in
+                        speechService.clearVoiceCache()
+                    }
+
+                    Toggle("Kid-Friendly Tone", isOn: $isKidFriendly)
+                } header: {
+                    Text("Guide Style")
+                } footer: {
+                    Text("Language affects both narration voice and AI responses. Kid-friendly tone is great for ages 11 to 13 — simpler words, more vivid stories.")
+                }
+
+                Section {
+                    Picker("Duration", selection: $tourDurationMinutes) {
+                        ForEach(GuidePreferences.TourDuration.allCases) { option in
+                            Text(option.displayName).tag(option.rawValue)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Radius")
+                            Spacer()
+                            Text(radiusDisplay)
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline.monospacedDigit())
+                        }
+                        Slider(value: $tourRadiusMeters, in: 500...5000, step: 100)
+                    }
+                } header: {
+                    Text("Tour Defaults")
+                } footer: {
+                    Text("Used when you generate an AI tour. Curated city tours use their own fixed routes.")
+                }
+
+                Section {
+                    Picker("Persona", selection: $personaId) {
+                        Text("Auto — let the tour decide").tag(GuidePreferences.autoPersonaId)
+                        ForEach(GuidePreferences.personaCatalog) { option in
+                            Text(option.displayName).tag(option.id)
+                        }
+                    }
+                    if personaId != GuidePreferences.autoPersonaId,
+                       let option = GuidePreferences.personaCatalog.first(where: { $0.id == personaId }) {
+                        Text(option.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Guide Persona")
+                } footer: {
+                    Text("Auto uses the voice picked by the tour generator or curated template. A specific persona overrides that across all tours and chat.")
                 }
 
                 Section("Voice Guide") {
@@ -108,7 +172,7 @@ struct SettingsView: View {
 
                 Section("About") {
                     LabeledContent("Version", value: "1.0")
-                    LabeledContent("AI Model", value: "Claude Sonnet 4.5")
+                    LabeledContent("AI Model", value: "Claude Sonnet 4.6")
                     LabeledContent("Map Data", value: "Apple MapKit")
                 }
             }
@@ -271,6 +335,13 @@ struct SettingsView: View {
             featureRow("Offline Template Responses", enabled: true)
             featureRow("MapKit POI Search", enabled: true)
         }
+    }
+
+    private var radiusDisplay: String {
+        if tourRadiusMeters < 1000 {
+            return String(format: "%.0f m", tourRadiusMeters)
+        }
+        return String(format: "%.1f km", tourRadiusMeters / 1000)
     }
 
     private func featureRow(_ name: String, enabled: Bool) -> some View {

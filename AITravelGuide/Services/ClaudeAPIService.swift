@@ -30,7 +30,9 @@ final class ClaudeAPIService: ObservableObject {
         lastError = nil
         defer { isLoading = false }
 
-        let systemPrompt = buildSystemPrompt(context: locationContext, persona: guidePersona)
+        // Tour persona takes precedence; otherwise honor the user's global persona choice.
+        let effectivePersona = guidePersona ?? GuidePreferences.selectedPersona
+        let systemPrompt = buildSystemPrompt(context: locationContext, persona: effectivePersona)
         let messages = buildMessages(history: conversationHistory, newQuestion: question)
 
         do {
@@ -133,6 +135,9 @@ final class ClaudeAPIService: ObservableObject {
         systemParts.append("Write as if speaking aloud to someone standing right here: use natural pauses, conversational tone, and vivid details.")
         systemParts.append("Keep it under 150 words. Do not use markdown, bullet points, or headings — just flowing spoken text.")
 
+        let modifier = GuidePreferences.systemPromptModifier
+        if !modifier.isEmpty { systemParts.append(modifier) }
+
         let system = systemParts.joined(separator: " ")
 
         var userParts: [String] = [
@@ -142,7 +147,14 @@ final class ClaudeAPIService: ObservableObject {
             "Location: \(locationContext.city ?? "Unknown"), \(locationContext.country ?? "Unknown")",
             "Neighborhood: \(locationContext.neighborhood ?? "N/A")"
         ]
-        if let note = stop.historicalNote { userParts.append("Historical note: \(note)") }
+        let facts = stop.effectiveFacts
+        if !facts.isEmpty {
+            let factLines = facts.map { fact -> String in
+                let year = fact.year.map { "(\($0)) " } ?? ""
+                return "- \(year)\(fact.title): \(fact.content)"
+            }
+            userParts.append("Facts to weave in naturally:\n" + factLines.joined(separator: "\n"))
+        }
         if let tip = stop.tips { userParts.append("Tip: \(tip)") }
         if let narration = stop.walkingNarration { userParts.append("Walking narration context: \(narration)") }
 
@@ -266,6 +278,12 @@ final class ClaudeAPIService: ObservableObject {
             if let cat = context.currentTourCategory {
                 parts.append("Tour type: \(cat)")
             }
+        }
+
+        let modifier = GuidePreferences.systemPromptModifier
+        if !modifier.isEmpty {
+            parts.append("")
+            parts.append(modifier)
         }
 
         return parts.joined(separator: "\n")

@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-struct GuidePersona: Codable {
+struct GuidePersona: Codable, Hashable {
     var name: String
     var tagline: String
     var voiceStyle: String

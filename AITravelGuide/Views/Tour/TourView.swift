@@ -251,9 +251,15 @@ struct TourView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text(categories.curated.isEmpty ? "Tour Type" : "AI-Generated Tours")
-                    .font(.headline)
-                    .padding(.horizontal)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(categories.curated.isEmpty ? "Tour Type" : "AI-Generated Tours")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(GuidePreferences.currentDuration.shortLabel) · \(GuidePreferences.radiusDisplayString)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal)
 
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
@@ -732,16 +738,8 @@ struct TourView: View {
                     progressBanner(commentary: commentary)
                 }
 
-                if let note = stop.historicalNote {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Historical Note", systemImage: "book.fill")
-                            .font(.caption.bold())
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .background(AppColors.historicalBackground, in: RoundedRectangle(cornerRadius: 8))
+                if !stop.effectiveFacts.isEmpty {
+                    HistoricalFactsPanel(facts: stop.effectiveFacts)
                 }
 
                 if let tip = stop.tips {
