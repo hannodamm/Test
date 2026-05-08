@@ -171,7 +171,7 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("Version", value: "1.0")
+                    LabeledContent("Version", value: appVersionDisplay)
                     LabeledContent("AI Model", value: "Claude Sonnet 4.6")
                     LabeledContent("Map Data", value: "Apple MapKit")
                 }
@@ -342,6 +342,13 @@ struct SettingsView: View {
             return String(format: "%.0f m", tourRadiusMeters)
         }
         return String(format: "%.1f km", tourRadiusMeters / 1000)
+    }
+
+    private var appVersionDisplay: String {
+        let info = Bundle.main.infoDictionary
+        let marketing = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(marketing) (\(build))"
     }
 
     private func featureRow(_ name: String, enabled: Bool) -> some View {
