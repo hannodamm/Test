@@ -40,7 +40,7 @@ struct SettingsView: View {
                 } header: {
                     Text("OpenAI API Key")
                 } footer: {
-                    Text("Used for natural-sounding voice narration. Get a key at platform.openai.com")
+                    Text("Used for natural-sounding voice narration in English. Non-English narration uses the iOS premium voice for your selected language. Get a key at platform.openai.com")
                 }
 
                 Section {

@@ -168,7 +168,13 @@ final class SpeechService: NSObject, ObservableObject {
         stop()
         guard voiceEnabled, !text.isEmpty else { return }
 
-        if APIKeyManager.shared.hasOpenAIKey {
+        // OpenAI's TTS voices speak non-English text with a strong English
+        // accent. Route through it only when the user's language is English;
+        // for any other language the iOS premium voices we already pick in
+        // `preferredVoice` sound dramatically better.
+        let useOpenAI = APIKeyManager.shared.hasOpenAIKey
+            && GuidePreferences.currentLanguage.id == "en"
+        if useOpenAI {
             isUsingOpenAI = true
             isSpeaking = true
             Task { await speakWithOpenAI(text) }
