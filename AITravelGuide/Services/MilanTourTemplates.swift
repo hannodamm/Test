@@ -21,11 +21,36 @@ struct TemplateStop {
     let searchQuery: String
     let description: String
     let historicalNote: String?
+    let historicalFacts: [HistoricalFact]?
     let tip: String?
     let durationMinutes: Int
     let iconType: String
     let walkingNarration: String?
     let discoveryPoints: [TemplateDiscoveryPoint]
+
+    init(
+        name: String,
+        searchQuery: String,
+        description: String,
+        historicalNote: String? = nil,
+        historicalFacts: [HistoricalFact]? = nil,
+        tip: String? = nil,
+        durationMinutes: Int,
+        iconType: String,
+        walkingNarration: String? = nil,
+        discoveryPoints: [TemplateDiscoveryPoint]
+    ) {
+        self.name = name
+        self.searchQuery = searchQuery
+        self.description = description
+        self.historicalNote = historicalNote
+        self.historicalFacts = historicalFacts
+        self.tip = tip
+        self.durationMinutes = durationMinutes
+        self.iconType = iconType
+        self.walkingNarration = walkingNarration
+        self.discoveryPoints = discoveryPoints
+    }
 }
 
 struct TourTemplate {
@@ -76,6 +101,12 @@ enum MilanTourTemplates {
                 searchQuery: "Duomo di Milano cathedral",
                 description: "Milan's Gothic cathedral took nearly six centuries to complete. Its forest of 135 spires and 3,400 statues makes it the largest church in Italy. Stand at the front and look up — the sheer ambition of this building set the tone for everything Milan would become.",
                 historicalNote: "Construction began in 1386 under Gian Galeazzo Visconti. Leonardo da Vinci himself submitted a design for the central cupola in 1487, though it was never built.",
+                historicalFacts: [
+                    HistoricalFact(year: "1386", title: "First stone laid", content: "Archbishop Antonio da Saluzzo blessed the foundation under Duke Gian Galeazzo Visconti. Construction would outlast 78 popes and didn't fully wrap up until the last pinnacle was finished in 1965.", category: .event),
+                    HistoricalFact(year: nil, title: "A forest of statues", content: "More than 3,400 statues stand on this cathedral — more than on any other building on earth. The spires alone hold 96 saints, and the laws of Milan still say no statue may surpass them.", category: .architecture),
+                    HistoricalFact(year: "1805", title: "Napoleon's coronation", content: "Napoleon crowned himself King of Italy in this cathedral and immediately ordered the unfinished facade completed at his expense. The neoclassical front you see today exists because of him.", category: .famous),
+                    HistoricalFact(year: nil, title: "The Madonnina watches over Milan", content: "Locals say no building in Milan may rise above the gilded statue of the Madonnina on the highest spire. When the Pirelli skyscraper broke that rule in 1958, a tiny replica of the Madonnina was placed on its roof to honour the tradition.", category: .legend)
+                ],
                 tip: "The rooftop terraces offer the best view in Milan. Go early morning to avoid crowds — you can walk among the spires and see the Alps on clear days.",
                 durationMinutes: 20,
                 iconType: "landmark",
@@ -93,6 +124,12 @@ enum MilanTourTemplates {
                 searchQuery: "Galleria Vittorio Emanuele II Milano",
                 description: "Step into Milan's stunning 19th-century shopping gallery — often called 'il salotto di Milano' (Milan's drawing room). The iron-and-glass roof soars above mosaic floors featuring the coats of arms of Italy's four capital cities.",
                 historicalNote: "Opened in 1877, this was one of the world's first shopping malls. Architect Giuseppe Mengoni fell from the roof just days before the inauguration — some say he jumped, others that he slipped while inspecting his masterpiece.",
+                historicalFacts: [
+                    HistoricalFact(year: "1877", title: "One of the first shopping arcades", content: "The Galleria opened to mark the unification of Italy and was one of the earliest large iron-and-glass arcades in the world, predating Paris's later passages and inspiring shopping galleries from Naples to Moscow.", category: .architecture),
+                    HistoricalFact(year: "1877", title: "The architect's tragic fall", content: "Days before the grand opening, architect Giuseppe Mengoni fell from the scaffolding around the central dome and died. Whether it was an accident, suicide, or sabotage has never been resolved.", category: .event),
+                    HistoricalFact(year: nil, title: "Spin on the bull for luck", content: "On the floor mosaic depicting Turin's coat of arms, the bull's groin has been worn smooth by generations of heels. Spinning three times on it is said to bring good luck — or fertility, depending on who you ask.", category: .legend),
+                    HistoricalFact(year: nil, title: "Four cities in mosaic", content: "The four lunette mosaics under the dome represent Europe, America, Africa, and Asia, while the floor mosaics carry the coats of arms of Italy's four early capitals: Turin, Florence, Rome, and Milan.", category: .culture)
+                ],
                 tip: "Find the bull mosaic on the floor near the center. Tradition says spinning three times on the bull's... sensitive area brings good luck. The floor there is worn smooth by millions of heels.",
                 durationMinutes: 15,
                 iconType: "landmark",
@@ -116,6 +153,12 @@ enum MilanTourTemplates {
                 searchQuery: "Teatro alla Scala Milano opera house",
                 description: "The world's most famous opera house hides behind a modest neoclassical facade. Inside, the horseshoe auditorium with its six tiers of boxes has hosted premieres by Verdi, Puccini, and Rossini. Even the exterior tells a story of Milan's love affair with music.",
                 historicalNote: "La Scala opened in 1778, built on the site of the church Santa Maria alla Scala. During WWII, it was heavily bombed. Milanese citizens prioritized rebuilding the opera house even before their own homes.",
+                historicalFacts: [
+                    HistoricalFact(year: "1778", title: "Born from an older fire", content: "When Milan's Teatro Regio Ducale burned down in 1776, Empress Maria Theresa ordered a replacement on the site of the deconsecrated church Santa Maria alla Scala — and the new theatre kept the church's name.", category: .event),
+                    HistoricalFact(year: nil, title: "The composers who premiered here", content: "Many of opera's most famous works had their world premiere on this stage: Rossini's Il turco in Italia, Bellini's Norma, Verdi's Nabucco and Otello, and Puccini's Madama Butterfly and Turandot.", category: .art),
+                    HistoricalFact(year: "1946", title: "Toscanini's homecoming", content: "After Allied bombs gutted the theatre in August 1943, Milan rebuilt La Scala before most of its housing. Arturo Toscanini conducted the reopening concert in May 1946 — many Milanese say it was the moment the city began to heal.", category: .famous),
+                    HistoricalFact(year: nil, title: "The loggione tradition", content: "The cheap upper-gallery seats, the loggione, are home to Milan's notoriously demanding opera fans. A poor performance can be booed off the stage by the loggionisti — even by the world's most famous singers.", category: .culture)
+                ],
                 tip: "The museum entrance on the side lets you peek into the auditorium even without a performance ticket. If you want to see a show, check for last-minute gallery tickets — they're surprisingly affordable.",
                 durationMinutes: 15,
                 iconType: "entertainment",
@@ -133,6 +176,12 @@ enum MilanTourTemplates {
                 searchQuery: "Castello Sforzesco Milano",
                 description: "This massive 15th-century fortress was the seat of Milan's ruling Sforza dynasty — and Leonardo's main patron Ludovico il Moro lived here. Leonardo spent 17 years in Milan under Sforza patronage, decorating rooms in this very castle.",
                 historicalNote: "Leonardo painted the extraordinary Sala delle Asse ceiling here around 1498 — an intricate trompe-l'oeil of intertwined mulberry trees. He also designed the castle's defenses and a system of locks for the nearby canals.",
+                historicalFacts: [
+                    HistoricalFact(year: "1450", title: "Built by a mercenary turned duke", content: "Francesco Sforza, who married into power and seized the dukedom, raised this castle on the ruins of the older Visconti fortress. Within a generation it was the largest court in Renaissance Italy.", category: .architecture),
+                    HistoricalFact(year: "1498", title: "Leonardo's living ceiling", content: "Leonardo painted the Sala delle Asse for Duke Ludovico il Moro: an interior turned into a forest, with sixteen mulberry trees whose branches knot together overhead. Layers of whitewash hid it for centuries; restoration is still ongoing today.", category: .art),
+                    HistoricalFact(year: "1564", title: "Michelangelo's last work", content: "The Rondanini Pietà — the sculpture Michelangelo was carving in the days before his death — is housed in a custom-built hall here. The unfinished figures seem to dissolve back into stone.", category: .famous),
+                    HistoricalFact(year: nil, title: "Defences and canals", content: "Leonardo also worked on the castle's defensive geometry and on the system of locks (conche) that let barges climb the nearby canals — including the very lock gate design still used worldwide.", category: .general)
+                ],
                 tip: "The castle museums are free on Tuesdays after 2pm. Don't miss Michelangelo's last sculpture, the unfinished Rondanini Pietà, in its own dedicated hall.",
                 durationMinutes: 20,
                 iconType: "historical",
@@ -156,6 +205,12 @@ enum MilanTourTemplates {
                 searchQuery: "Santa Maria delle Grazie Milano",
                 description: "This Renaissance church houses Leonardo da Vinci's 'The Last Supper' — arguably the most famous painting in the world. The fresco covers an entire wall of the former refectory, measuring 4.6 by 8.8 meters. Standing before it is a once-in-a-lifetime experience.",
                 historicalNote: "Leonardo painted The Last Supper between 1495 and 1498. Unlike traditional fresco technique, he used experimental tempera and oil on dry plaster, which began deteriorating almost immediately. During WWII bombing in 1943, the refectory roof collapsed — but the wall with the painting miraculously survived, protected by sandbags.",
+                historicalFacts: [
+                    HistoricalFact(year: "1495", title: "Three years on a wall", content: "Leonardo da Vinci spent roughly three years on The Last Supper. He worked on the dining wall of the Dominican refectory while the friars ate beneath him — slowly, sometimes obsessively.", category: .art),
+                    HistoricalFact(year: nil, title: "An experiment that betrayed him", content: "Instead of true fresco, Leonardo used tempera and oil on a dry sealed wall so he could rework details. The technique began flaking within twenty years and has demanded restoration ever since.", category: .general),
+                    HistoricalFact(year: "1943", title: "The wall that survived the war", content: "Allied bombs destroyed the refectory's roof and three walls in August 1943. Sandbags stacked against the painting saved it. For weeks the Last Supper stood open to the sky.", category: .event),
+                    HistoricalFact(year: "1492", title: "Bramante's apse", content: "The church itself — and especially Bramante's tribune behind the high altar — is a Renaissance masterpiece in its own right. The same architect later began the rebuilding of St Peter's in Rome.", category: .architecture)
+                ],
                 tip: "Tickets sell out months in advance — book at least 2-3 months ahead. Only 25 people are allowed in for 15 minutes at a time. Arrive 20 minutes early. No flash photography, but regular photos are allowed.",
                 durationMinutes: 25,
                 iconType: "museum",
@@ -198,6 +253,11 @@ enum MilanTourTemplates {
                 searchQuery: "Pasticceria Marchesi Via Santa Maria alla Porta Milano",
                 description: "Milan's oldest pastry shop, founded in 1824. The green-and-gold Art Nouveau interior feels like stepping into a jewel box. Their panettone is legendary — Milanese families have been ordering it for Christmas for nearly 200 years.",
                 historicalNote: "The Marchesi family has passed down recipes for eight generations. Prada acquired the brand in 2014, but the recipes and artisan methods remain unchanged. Every panettone is still hand-shaped.",
+                historicalFacts: [
+                    HistoricalFact(year: "1824", title: "Milan's oldest pasticceria", content: "Angelo Marchesi opened on Via Santa Maria alla Porta in 1824, two years before Beethoven's last symphony premiered. Eight generations of the family have run the counter since.", category: .general),
+                    HistoricalFact(year: "2014", title: "Prada steps in", content: "When the Marchesi family was ready to step back, Prada bought a majority stake to preserve the shop. Recipes, methods, and the green-and-gold packaging all remain untouched.", category: .culture),
+                    HistoricalFact(year: nil, title: "Panettone, a Milanese export", content: "Milan's signature Christmas cake spread worldwide via emigrant Milanese in the 19th and 20th centuries. The tall dome shape became standard only after the engineer Angelo Motta industrialized it in the 1920s — but Marchesi still hand-shapes theirs.", category: .culture)
+                ],
                 tip: "Order a brioche con crema and a caffè al banco (at the counter) — it's the classic Milanese breakfast. Standing at the bar is cheaper and more authentic than sitting at a table.",
                 durationMinutes: 20,
                 iconType: "restaurant",
@@ -216,6 +276,11 @@ enum MilanTourTemplates {
                 searchQuery: "Pescheria da Claudio Brera Milano",
                 description: "This tiny fish shop in the heart of Brera has been run by the same family since the 1950s. Despite being hundreds of kilometers from the coast, Milan has a proud seafood tradition thanks to ancient trade routes. Claudio personally selects fish at 4am every morning.",
                 historicalNote: "Milan's canal system, the Navigli, once connected the city to Lake Maggiore and the Adriatic. Fresh fish arrived daily by boat — a tradition that gave Milan surprisingly excellent seafood for an inland city.",
+                historicalFacts: [
+                    HistoricalFact(year: nil, title: "An inland fish city", content: "Despite being 100 km from the sea, Milan has a serious seafood tradition: barges brought fish up the Naviglio Grande from Lake Maggiore and the Po river network for centuries.", category: .culture),
+                    HistoricalFact(year: nil, title: "Friday fish", content: "Catholic Friday-fish customs and the canal supply line shaped Milanese cooking — risotto al pesce persico (perch) and fritto misto are still on local menus today.", category: .culture),
+                    HistoricalFact(year: "1776", title: "Brera's bohemian roots", content: "The Pinacoteca and Academy of Fine Arts opened here under Habsburg patronage in 1776, drawing artists, students, and the small shops that still feed them — fishmongers included.", category: .general)
+                ],
                 tip: "Ask for a small tasting of their crudo (raw fish) if they're preparing it. The sea bass carpaccio is extraordinary. Arrive before noon for the best selection.",
                 durationMinutes: 15,
                 iconType: "shopping",
@@ -239,6 +304,11 @@ enum MilanTourTemplates {
                 searchQuery: "Mercato di Brera Via San Marco Milano",
                 description: "This open-air market on Via San Marco brings together local producers every third Saturday. Even on regular days, the surrounding shops sell fresh produce, aged cheeses, and cured meats that tell the story of Lombardy's agricultural richness.",
                 historicalNote: "Lombardy's Po Valley is Italy's most productive agricultural region. The risotto rice, Gorgonzola cheese, and bresaola you'll find here all come from within a few hours of Milan.",
+                historicalFacts: [
+                    HistoricalFact(year: nil, title: "Italy's rice belt", content: "Lombardy and neighboring Piedmont grow the bulk of Italy's rice — Carnaroli, Arborio, and Vialone Nano — in flooded paddies that stretch from Pavia to the Po. Risotto is essentially geography.", category: .nature),
+                    HistoricalFact(year: nil, title: "Gorgonzola, the town", content: "Gorgonzola DOP cheese is named after the village of Gorgonzola, just east of Milan, where cattle returning from Alpine summer pastures used to be milked.", category: .culture),
+                    HistoricalFact(year: nil, title: "Bresaola from Valtellina", content: "The dark, salt-cured beef bresaola comes from the Valtellina valley north of Milan. Cold mountain winds dry it slowly, giving it the dense ruby color you'll see at every Milanese deli counter.", category: .general)
+                ],
                 tip: "Look for Gorgonzola DOP — it was invented in the town of Gorgonzola, just 20km from Milan. Try both the dolce (creamy, mild) and piccante (sharp, crumbly) versions.",
                 durationMinutes: 15,
                 iconType: "shopping",
@@ -257,6 +327,11 @@ enum MilanTourTemplates {
                 searchQuery: "Trattoria Milanese Via Santa Marta Milano",
                 description: "This family-run trattoria has been serving classic Milanese cuisine since 1933. The risotto alla milanese — saffron-gold and impossibly creamy — is made the same way it has been for generations. The cotoletta alla milanese (the original breaded cutlet) is thick, bone-in, and magnificent.",
                 historicalNote: "Risotto alla milanese gets its golden color from saffron, which arrived in Milan via Arab traders in the Middle Ages. Legend says a cathedral glassmaker who used saffron to tint yellow glass accidentally dropped some into a wedding risotto — and a classic was born.",
+                historicalFacts: [
+                    HistoricalFact(year: "1574", title: "The saffron-glassmaker legend", content: "A 1574 wedding feast for a glassmaker's daughter at the Duomo workshop is the moment Milanese folklore points to: an apprentice tipped saffron — used to tint cathedral windows yellow — into the risotto as a prank, and a classic was born.", category: .legend),
+                    HistoricalFact(year: nil, title: "Cotoletta vs. Wiener Schnitzel", content: "Milanese cotoletta is bone-in veal, breaded and butter-fried. Vienna's Wiener Schnitzel is boneless and fried in lard. Both cities still claim to have invented it; the cooks of Habsburg-era Milan probably settle the argument.", category: .culture),
+                    HistoricalFact(year: nil, title: "Ossobuco's marrow tradition", content: "Ossobuco — 'bone with a hole' — is veal shank braised with white wine, broth, and gremolata. The marrow is scooped out with a small spoon called an esattore, the tax collector.", category: .culture)
+                ],
                 tip: "Order the risotto alla milanese and the cotoletta. Don't rush — Milanese eat slowly. Ask for the ossobuco if they have it; traditionally it's served alongside the risotto.",
                 durationMinutes: 30,
                 iconType: "restaurant",
@@ -322,6 +397,11 @@ enum MilanTourTemplates {
                 searchQuery: "Palazzo Clerici Via Clerici Milano",
                 description: "Push through the unremarkable entrance on Via Clerici and prepare for sensory overload. The Gallery of Tapestries contains Tiepolo's breathtaking ceiling fresco — a swirling panorama of the four continents painted in 1741. The explosion of color and movement above you is staggering.",
                 historicalNote: "Marshal Anton Giorgio Clerici commissioned Tiepolo, the greatest fresco painter of the 18th century, to decorate his palazzo. The 'Chariot of the Sun' fresco spans the entire 23-meter gallery ceiling. Napoleon later used this palazzo as his Milanese headquarters.",
+                historicalFacts: [
+                    HistoricalFact(year: "1741", title: "Tiepolo's chariot of the sun", content: "Anton Giorgio Clerici, a wealthy Milanese marshal, hired Giambattista Tiepolo to fresco his Gallery of Tapestries in 1741. The Chariot of the Sun stretches the full 23-metre length of the ceiling.", category: .art),
+                    HistoricalFact(year: "1796", title: "Napoleon's Milanese headquarters", content: "After Napoleon entered Milan in 1796, he made the palazzo the seat of the Cisalpine Republic's directorate. He held court under Tiepolo's frescoes during his campaigns in northern Italy.", category: .famous),
+                    HistoricalFact(year: nil, title: "Modesty as a Milanese virtue", content: "The plain street facade is deliberately understated — wealthy Milanese families saved spectacle for the inside, behind the portone. Locals call it the 'turn-the-money-inside' style.", category: .architecture)
+                ],
                 tip: "The palazzo is now home to ISPI (Institute for International Political Studies) and hosts occasional public events. Check their website for open days — or simply walk in during business hours and ask politely. The porters are usually welcoming.",
                 durationMinutes: 15,
                 iconType: "historical",
@@ -339,6 +419,11 @@ enum MilanTourTemplates {
                 searchQuery: "Ca' Granda Università degli Studi Milano",
                 description: "Originally Milan's main hospital built in 1456, this masterpiece by Filarete features a stunning Renaissance courtyard with elegant loggia on all four sides. The geometric perfection of the arched colonnades is mesmerizing — and most of Milan walks past without knowing it's there.",
                 historicalNote: "The Ca' Granda operated as a hospital for over 400 years. It was revolutionary for its time: separate wards for men and women, running water, and cross-shaped layouts for ventilation. Since 1958, it's been the University of Milan's main building.",
+                historicalFacts: [
+                    HistoricalFact(year: "1456", title: "Filarete's ideal hospital", content: "Florentine architect Antonio Filarete began the building in 1456 for Duke Francesco Sforza. Its cross-shaped wards and central court were a revolutionary design copied across Europe.", category: .architecture),
+                    HistoricalFact(year: nil, title: "The 'Big House' of Milan", content: "Locals nicknamed it the Ca' Granda — the 'Big House.' For four centuries it was Milan's main hospital, treating up to 2,000 patients at a time before closing in 1939.", category: .general),
+                    HistoricalFact(year: "1958", title: "From wards to lecture halls", content: "After heavy WWII damage, the city rebuilt the complex and handed it to the University of Milan in 1958. Today philosophy lectures echo where surgical wards once stood.", category: .event)
+                ],
                 tip: "Walk through the main entrance on Via Festa del Perdono and into the central courtyard. It's a public university building, so you can freely explore. The inner garden courtyard is even more peaceful.",
                 durationMinutes: 20,
                 iconType: "historical",
@@ -363,6 +448,11 @@ enum MilanTourTemplates {
                 searchQuery: "Palazzo Borromeo Piazza Borromeo Milano",
                 description: "The Borromeo family — one of Milan's most powerful dynasties for 600 years — built this Gothic-Renaissance palazzo in the 1300s. The courtyard features original 15th-century frescoes of courtly games, remarkably preserved and full of vivid detail.",
                 historicalNote: "The Borromeo family produced cardinals, saints (San Carlo Borromeo), and diplomats. They still own the Borromean Islands on Lake Maggiore. The palazzo frescoes show nobles playing tarocchi (tarot cards) and pallacorda (an early form of tennis).",
+                historicalFacts: [
+                    HistoricalFact(year: "1450", title: "A dynasty of cardinals", content: "The Borromeos rose to power as bankers in the 14th century and went on to produce cardinals, saints, and diplomats — including San Carlo Borromeo, the Counter-Reformation reformer who shaped Milan's church architecture.", category: .famous),
+                    HistoricalFact(year: nil, title: "Frescoes of courtly games", content: "The cortile loggia preserves rare 15th-century frescoes showing nobles at games — tarocchi (early tarot cards) and pallacorda, an ancestor of tennis played indoors with rackets.", category: .art),
+                    HistoricalFact(year: nil, title: "Still owners of the islands", content: "The Borromean family still owns Isola Bella and Isola Madre on Lake Maggiore. The peacocks that wander the gardens there are descendants of birds the family imported in the 1600s.", category: .culture)
+                ],
                 tip: "The courtyard is sometimes locked but often open during business hours — the building houses offices. Look through the gate if closed; you can still see the frescoed loggia. Ring the bell and explain you'd like to see the cortile — Italians respect cultural curiosity.",
                 durationMinutes: 15,
                 iconType: "historical",
@@ -381,6 +471,11 @@ enum MilanTourTemplates {
                 searchQuery: "Santa Maria presso San Satiro Milano",
                 description: "Bramante's masterpiece of architectural illusion. The church had no room for a proper apse, so Bramante created a stunning trompe-l'oeil: what appears to be a deep choir extending 9 meters behind the altar is actually a flat wall painted to look three-dimensional. Stand at the entrance and your eyes will refuse to believe the truth.",
                 historicalNote: "Bramante created this fake perspective around 1482, making a surface only 97cm deep appear to extend many meters. It's considered one of the greatest architectural trompe-l'oeil ever created. The technique was revolutionary for the Renaissance.",
+                historicalFacts: [
+                    HistoricalFact(year: "1482", title: "Bramante's impossible apse", content: "When the church needed a deep choir but the road behind blocked any expansion, Donato Bramante painted one. The apse is only 97 cm deep but appears to extend many metres — a Renaissance optical trick that still works.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Bramante's training ground", content: "Bramante refined the perspective tricks of San Satiro into the geometric clarity that defines High Renaissance architecture. From Milan he went to Rome, where he laid the foundations of the new St Peter's.", category: .famous),
+                    HistoricalFact(year: nil, title: "A relic among the columns", content: "The church grew up around an older 9th-century shrine to San Satiro that was famous for a miraculous Madonna. The tiny chapel is still tucked into the south side, almost hidden behind the new church.", category: .legend)
+                ],
                 tip: "Stand in the center of the nave and look at the apse — it looks completely real. Now walk to the side and watch the illusion collapse. The 'aha' moment is incredible. Free entry.",
                 durationMinutes: 15,
                 iconType: "landmark",
@@ -399,6 +494,11 @@ enum MilanTourTemplates {
                 searchQuery: "Palazzo Crivelli Via Pontaccio Milano",
                 description: "This lesser-known Renaissance palazzo features a stunning ringhiera courtyard — the uniquely Milanese style with iron-railed balconies running around all four sides. Laundry might hang from upper floors; this is a living, breathing courtyard, not a museum piece. That's what makes it perfect.",
                 historicalNote: "The ringhiera style evolved from medieval communal housing. Multiple families shared a courtyard, with external balconies providing access to upper-floor apartments. This design shaped Milanese social life for centuries — neighbors knew everyone's business.",
+                historicalFacts: [
+                    HistoricalFact(year: nil, title: "Iron-railed Milanese balconies", content: "Casa di ringhiera buildings — courtyards ringed by iron-railed balconies on every floor — were the working-class housing of 19th-century Milan. Each balcony served as the front door to a one-room flat.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Communal kitchens, communal lives", content: "Many ringhiera buildings shared a single ballatoio kitchen and water tap per floor. Disagreements, gossip, and friendships all played out in the open courtyard below — the social fabric of working Milan.", category: .culture),
+                    HistoricalFact(year: nil, title: "From slums to chic", content: "After WWII these buildings were considered slums and many were demolished. Today the surviving ringhiere in Brera and Porta Garibaldi are some of Milan's most desirable addresses.", category: .general)
+                ],
                 tip: "If the portone (main door) is closed, wait for a resident to enter or exit and politely ask if you can peek at the courtyard. Most Milanese are proud of their cortili and happy to show them off.",
                 durationMinutes: 15,
                 iconType: "historical",
@@ -443,6 +543,11 @@ enum MilanTourTemplates {
                 searchQuery: "Darsena Milano Navigli",
                 description: "Milan's historic port basin where the Naviglio Grande and Naviglio Pavese meet. Recently renovated, the waterfront promenade is the perfect starting point for an evening stroll along the canals.",
                 historicalNote: "The Darsena was Milan's main port from the 1600s until the 1950s. Barges carried goods from the Po River and Lake Maggiore. The canal system, partly designed by Leonardo da Vinci, once made Milan a port city despite being 100km from the sea.",
+                historicalFacts: [
+                    HistoricalFact(year: nil, title: "Milan's inland port", content: "From the 1600s until the 1950s, the Darsena was the main loading basin where the Naviglio Grande and the Naviglio Pavese met. At its peak it handled more cargo by tonnage than any port in Italy except Genoa.", category: .general),
+                    HistoricalFact(year: "1487", title: "Leonardo's lock geometry", content: "Working in Milan under Sforza patronage, Leonardo da Vinci sketched lock-gate designs that hold water more reliably than the older single-leaf gates. The mitre lock he refined is still used in canals worldwide.", category: .famous),
+                    HistoricalFact(year: "2015", title: "Reopened for the Expo", content: "The Darsena had been paved over and forgotten for decades when Milan reopened the basin and rebuilt the promenade for Expo 2015. It's now one of the city's favourite evening hangouts.", category: .event)
+                ],
                 tip: "Grab a drink at one of the waterfront bars and watch the sunset reflect off the water. The west-facing position makes for spectacular golden hour light.",
                 durationMinutes: 15,
                 iconType: "viewpoint",
@@ -460,6 +565,11 @@ enum MilanTourTemplates {
                 searchQuery: "Naviglio Grande Milano vicolo dei Lavandai",
                 description: "The oldest of Milan's canals, dating to 1177. Walk along the towpath past colorful buildings, artist studios, and antique shops. The Vicolo dei Lavandai (Washerwomen's Lane) preserves the old stone wash stations where women did laundry until the 1950s.",
                 historicalNote: "The Naviglio Grande stretches 50km from the Ticino River to Milan. It took over a century to complete. The marble for the Duomo arrived on barges along this canal — a journey that took days.",
+                historicalFacts: [
+                    HistoricalFact(year: "1177", title: "Italy's oldest navigable canal", content: "Construction on the Naviglio Grande began in 1177 and continued in stages for more than a century. When complete it linked the Ticino river all the way into Milan — the oldest still-navigable canal in Europe.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Marble for the Duomo", content: "The pink-veined Candoglia marble for the Duomo travelled by barge from quarries on Lake Maggiore down the Ticino and along this very canal. Each block was tax-free; cathedral barges flew the special marking 'AUF' — 'Ad Usum Fabricae'.", category: .event),
+                    HistoricalFact(year: nil, title: "The washerwomen's lane", content: "Vicolo dei Lavandai preserves the covered stone wash basins where Milanese women rinsed laundry in canal water — a working laundry until the 1950s, now one of the city's most photographed corners.", category: .culture)
+                ],
                 tip: "The antique market on the last Sunday of each month transforms the canal banks into one of Italy's best flea markets. Arrive early for the best finds.",
                 durationMinutes: 20,
                 iconType: "landmark",
@@ -489,6 +599,11 @@ enum MilanTourTemplates {
                 searchQuery: "Chiesa di San Cristoforo sul Naviglio Milano",
                 description: "Two medieval churches fused into one, sitting right on the canal bank. The older dates to the 1100s. At night, the illuminated facade reflecting in the still canal water is one of Milan's most atmospheric sights.",
                 historicalNote: "San Cristoforo is the patron saint of travelers. Medieval boatmen would stop here to pray for safe passage before continuing their journey along the canal. The tradition of blessing travelers continues today.",
+                historicalFacts: [
+                    HistoricalFact(year: "1192", title: "A canal-side church", content: "The first San Cristoforo chapel was raised here in 1192, when boatmen on the new Naviglio Grande needed a place to bless their cargo. The current twin-naved church grew around it in the 14th century.", category: .architecture),
+                    HistoricalFact(year: nil, title: "The patron of travellers", content: "San Cristoforo — Saint Christopher — is the patron of all who travel. Boatmen, then carters, then pilgrims, then truck drivers all stopped here for a blessing. The tradition continues; modern delivery drivers still leave keys on his altar.", category: .legend),
+                    HistoricalFact(year: nil, title: "Two churches in one", content: "Look closely: there are actually two churches sharing one facade. The original 12th-century chapel sits beside a 14th-century ducal chapel. Each has its own door, its own apse, and its own bells.", category: .general)
+                ],
                 tip: "If the church is open, step inside to see the 14th-century frescoes. Outside, the small bridge offers the best photo spot with the church reflecting in the canal.",
                 durationMinutes: 10,
                 iconType: "historical",
@@ -500,6 +615,11 @@ enum MilanTourTemplates {
                 searchQuery: "Naviglio Pavese Milano ponte",
                 description: "The younger sibling of Naviglio Grande, this canal leads south toward Pavia. The evening scene here is more relaxed and local — fewer tourists, more Milanese enjoying their nightly passeggiata along the water.",
                 historicalNote: "The Naviglio Pavese was completed in 1819 and once featured 12 locks to handle the elevation change between Milan and Pavia. It was a major commercial waterway until the mid-20th century.",
+                historicalFacts: [
+                    HistoricalFact(year: "1819", title: "Finished under Habsburg rule", content: "Begun under Napoleon and completed in 1819 under the Austrian Habsburgs, the 33-km Naviglio Pavese finally connected Milan to the Ticino at Pavia — and from there, all the way to the Po and the Adriatic.", category: .event),
+                    HistoricalFact(year: nil, title: "Twelve locks of stairs", content: "The canal drops about 56 metres between Milan and Pavia, handled by twelve locks (conche). Barges took most of a day to descend the staircase of water gates.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Kings of the bargemen", content: "Until trains and trucks took over in the 1950s, this canal was worked by famiglie di barcaioli — boat-owning families who handed barges down through generations.", category: .culture)
+                ],
                 tip: "End the evening at one of the trattorias along Via Ascanio Sforza. The outdoor tables along the canal, candlelit and buzzing with conversation, are quintessential Milan.",
                 durationMinutes: 15,
                 iconType: "landmark",
@@ -536,6 +656,11 @@ enum MilanTourTemplates {
                 searchQuery: "Via Montenapoleone Milano",
                 description: "The most exclusive fashion district in the world. Via Montenapoleone, Via della Spiga, Via Manzoni, and Corso Venezia form a golden rectangle where every luxury brand has its flagship. Even window-shopping here is an experience in design perfection.",
                 historicalNote: "The Quadrilatero became Milan's fashion center in the 1950s-60s when designers like Krizia, Missoni, and Valentino opened ateliers here, challenging Paris's fashion monopoly.",
+                historicalFacts: [
+                    HistoricalFact(year: nil, title: "The four golden streets", content: "Via Montenapoleone, Via della Spiga, Via Sant'Andrea, and Via Manzoni form a rectangle that became Milan's golden quadrilateral after WWII, when Italian designers turned a once-quiet residential quarter into a global retail spine.", category: .general),
+                    HistoricalFact(year: "1958", title: "Krizia opens, then Missoni and Valentino", content: "Mariuccia Mandelli launched Krizia in 1954 and opened her boutique here in 1958 — one of the first brands to anchor the Quadrilatero. Missoni, Valentino, and Armani followed within two decades.", category: .culture),
+                    HistoricalFact(year: nil, title: "Why Milan beat Florence", content: "Milan stole Italy's fashion crown from Florence in the 1970s by combining ready-to-wear, industrial textile know-how from Como and Biella, and a press machine — La Settimana della Moda. The city has held the title ever since.", category: .event)
+                ],
                 tip: "Via della Spiga is pedestrian-only and feels more intimate than busy Montenapoleone. Look up at the palazzo facades — many fashion houses occupy buildings that were once noble residences.",
                 durationMinutes: 20,
                 iconType: "shopping",
@@ -554,6 +679,11 @@ enum MilanTourTemplates {
                 searchQuery: "10 Corso Como Milano",
                 description: "The world's first concept store, founded by former Vogue Italia editor Carla Sozzani in 1990. A curated mix of fashion, art, design, and a beautiful garden cafe. This is where fashion meets culture.",
                 historicalNote: "Carla Sozzani transformed a former garage into a cultural destination that spawned an entire retail category. The concept store model — blending commerce, art, and lifestyle — has been copied worldwide but never matched.",
+                historicalFacts: [
+                    HistoricalFact(year: "1990", title: "The world's first concept store", content: "Carla Sozzani opened 10 Corso Como in 1990 in a converted Garibaldi-district garage. It was the first shop to deliberately mix fashion retail, an art gallery, a bookshop, a restaurant, and a courtyard café under one roof.", category: .event),
+                    HistoricalFact(year: nil, title: "Architecture by Kris Ruhs", content: "American artist Kris Ruhs designed the courtyard's signature wrought-iron canopies and floral motifs. Walk past the planters and you're walking through pieces of his sculpture.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Copied everywhere, matched rarely", content: "Dover Street Market, Colette in Paris, RRL in New York — every concept store of the last three decades owes a debt to 10 Corso Como. None has the same loose, lived-in feel of the original courtyard.", category: .culture)
+                ],
                 tip: "The rooftop garden cafe is a hidden oasis. The bookshop is one of Milan's best for photography, art, and design titles.",
                 durationMinutes: 20,
                 iconType: "shopping",
@@ -583,6 +713,11 @@ enum MilanTourTemplates {
                 searchQuery: "Armani Silos Via Bergognone Milano",
                 description: "Giorgio Armani's personal museum, housed in a converted 1950s granary. Four floors trace the designer's revolutionary impact on fashion — from deconstructed blazers to red carpet gowns. The minimalist space perfectly reflects Armani's aesthetic philosophy.",
                 historicalNote: "Armani revolutionized fashion in the 1980s by deconstructing the power suit, removing padding and stiffness. He dressed Hollywood and changed how the world thought about elegance. This building is in the Tortona district, Milan's design hub.",
+                historicalFacts: [
+                    HistoricalFact(year: "1980", title: "Armani's Hollywood moment", content: "When Richard Gere wore Giorgio Armani's softly tailored, unstructured suits in American Gigolo, Italian fashion's reputation for menswear changed overnight — and Hollywood couldn't stop calling.", category: .famous),
+                    HistoricalFact(year: "2015", title: "From granary to gallery", content: "Armani opened the Silos in a former Nestlé granary in 2015 to mark the 40th anniversary of his label. The cuboid concrete building still keeps the original silo's grid of light shafts.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Tortona, Milan's design quarter", content: "The Tortona district was a textile and food-warehouse zone until designers and photographers — drawn by cheap rent and tall windows — colonized it in the 1990s. Today it hosts Salone del Mobile satellite shows every April.", category: .general)
+                ],
                 tip: "The top floor often has special exhibitions. The ground-floor cafe and bookshop are accessible without a ticket.",
                 durationMinutes: 25,
                 iconType: "museum",
@@ -630,6 +765,11 @@ enum MilanTourTemplates {
                 searchQuery: "Caffè Cova Via Montenapoleone Milano",
                 description: "Founded in 1817 near La Scala, Cova has been the caffè of choice for Milan's elite for over two centuries. The wood-paneled interior, crystal chandeliers, and impeccable service make every espresso feel like an occasion.",
                 historicalNote: "Cova was a meeting point for Italian patriots during the Risorgimento — revolutionary plans were hatched over tiny cups of espresso. The pastry counter has served its famous hazelnut cake since the 1800s.",
+                historicalFacts: [
+                    HistoricalFact(year: "1817", title: "A Napoleonic veteran's café", content: "Antonio Cova, a soldier who had fought under Napoleon, opened the café in 1817 next to La Scala. It quickly became the after-opera meeting spot of Milan's elite.", category: .general),
+                    HistoricalFact(year: nil, title: "Risorgimento conspirators", content: "During the Italian unification movement, members of the secret Carboneria society met at Cova's tables. The waiters were said to be loyal to a man, never repeating what they overheard.", category: .event),
+                    HistoricalFact(year: "2013", title: "Bought by LVMH", content: "Louis Vuitton's parent group LVMH bought the historic café in 2013 and reopened a flagship inside Via Montenapoleone. Critics worried; the velvet banquettes and panettone recipe survived.", category: .culture)
+                ],
                 tip: "Order your caffè al banco (at the bar) like a true Milanese — it's faster, cheaper, and more authentic. Standing at an Italian bar is a social experience, not a compromise.",
                 durationMinutes: 15,
                 iconType: "restaurant",
@@ -641,6 +781,11 @@ enum MilanTourTemplates {
                 searchQuery: "Camparino in Galleria Milano",
                 description: "Gaspare Campari opened this Art Nouveau bar in 1867, directly inside the Galleria. While famous for the bitter aperitivo that bears his name, the caffè here is equally ceremonial. The mosaic floors and carved woodwork transport you to Belle Époque Milan.",
                 historicalNote: "The Campari company was born here. Gaspare Campari invented his signature bitter red drink using a secret recipe of herbs and spices that remains unchanged — and unknown — to this day.",
+                historicalFacts: [
+                    HistoricalFact(year: "1860", title: "Gaspare's secret recipe", content: "Gaspare Campari invented his bittersweet red liqueur in 1860 using more than 60 herbs, spices, fruit peels, and roots. The recipe has been kept secret in Sesto San Giovanni ever since — only one or two living people are said to know it.", category: .famous),
+                    HistoricalFact(year: "1915", title: "Camparino opens in the Galleria", content: "Davide Campari, Gaspare's son, opened this Galleria bar in 1915 to showcase the family's drinks under the iron-and-glass dome. The Liberty mosaics were designed by Angelo D'Andrea, who also worked on La Scala interiors.", category: .architecture),
+                    HistoricalFact(year: nil, title: "Cochineal, then synthetic", content: "Until 2006, Campari got its famous deep red colour from crushed cochineal insects. The recipe switched to artificial colouring — but only after 146 years of beetle-based bitter.", category: .culture)
+                ],
                 tip: "Try a caffè corretto — espresso 'corrected' with a splash of grappa or sambuca. It's a classic Milanese pick-me-up, usually enjoyed in the afternoon.",
                 durationMinutes: 15,
                 iconType: "restaurant",
@@ -687,6 +832,11 @@ enum MilanTourTemplates {
                 searchQuery: "Caffè Napoli Via Boccaccio Milano",
                 description: "To understand Milanese coffee, you need to taste its rival. This Neapolitan-style bar serves espresso the southern way — darker roast, higher temperature, smaller cup, more intense. The friendly north-south coffee rivalry is one of Italy's great debates.",
                 historicalNote: "The espresso machine was actually invented in Milan — Angelo Moriondo patented the first one in Turin in 1884, but it was Milanese manufacturer La Marzocco and later Faema that perfected and popularized the technology worldwide.",
+                historicalFacts: [
+                    HistoricalFact(year: "1901", title: "Bezzera's pressure machine", content: "Milanese engineer Luigi Bezzera patented the first practical commercial espresso machine in 1901. Steam pressure forced water through ground coffee in seconds — the basic principle every modern espresso bar still uses.", category: .event),
+                    HistoricalFact(year: "1961", title: "Faema's revolutionary E61", content: "Milan-area maker Faema launched the E61 in 1961, the first machine to use a motorized pump rather than steam pressure. It's the moment espresso went from steam-puffed to crema-rich.", category: .architecture),
+                    HistoricalFact(year: nil, title: "How to drink like a Milanese", content: "A caffè means an espresso. A caffè macchiato is a 'stained' espresso with a teaspoon of milk. A cappuccino after 11am marks you as a tourist. And the bar staff don't expect you to sit — drink it standing.", category: .culture)
+                ],
                 tip: "Order a caffè like they drink it in Naples and compare to the Milanese style you've been tasting. The difference is striking — both delicious, completely different philosophies.",
                 durationMinutes: 15,
                 iconType: "restaurant",

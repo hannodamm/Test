@@ -110,6 +110,7 @@ final class TourGuideService: ObservableObject {
                 orderIndex: index,
                 durationMinutes: templateStop.durationMinutes,
                 historicalNote: templateStop.historicalNote,
+                historicalFacts: templateStop.historicalFacts,
                 tips: templateStop.tip,
                 imageSystemName: iconForType(templateStop.iconType),
                 walkingNarration: templateStop.walkingNarration,
