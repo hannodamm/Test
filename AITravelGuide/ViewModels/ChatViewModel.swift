@@ -11,16 +11,25 @@ final class ChatViewModel: ObservableObject {
     @Published var lastMessageWasError: Bool = false
 
     private let claudeAPI = ClaudeAPIService()
+    private let onDevice = OnDeviceGuideService()
     private let tourGuideService = TourGuideService()
     private var nearbyPOIs: [PointOfInterest] = []
     private var currentTour: Tour?
 
     init() {
-        let hasKey = APIKeyManager.shared.hasAPIKey
-        isUsingAI = hasKey
-        let greeting = hasKey
-            ? "Hello! I'm your AI travel guide powered by Claude. Here's what I can help with:\n\n- Local attractions & hidden gems\n- Restaurant & cafe recommendations\n- History & culture of the area\n- Transport & navigation tips\n- Safety advice & local customs\n\nAsk me anything about where you are!"
-            : "Hello! I'm your travel guide. Add a Claude API key in Settings to unlock AI-powered responses. I can still help with basic questions about the area!"
+        let capabilities = "\n\n- Local attractions & hidden gems\n- Restaurant & cafe recommendations\n- History & culture of the area\n- Transport & navigation tips\n- Safety advice & local customs\n\nAsk me anything about where you are!"
+        let greeting: String
+        switch GuideRouter.selectBackend() {
+        case .claude:
+            isUsingAI = true
+            greeting = "Hello! I'm your AI travel guide powered by Claude. Here's what I can help with:\(capabilities)"
+        case .onDevice:
+            isUsingAI = true
+            greeting = "Hello! I'm your AI travel guide, running on Apple's on-device intelligence — no API key needed. Here's what I can help with:\(capabilities)"
+        case .canned:
+            isUsingAI = false
+            greeting = "Hello! I'm your travel guide. Add a Claude API key in Settings to unlock AI-powered responses. I can still help with basic questions about the area!"
+        }
         messages.append(ChatMessage.assistantMessage(greeting))
     }
 
@@ -43,7 +52,16 @@ final class ChatViewModel: ObservableObject {
 
         let response: String
 
-        if APIKeyManager.shared.hasAPIKey {
+        let canned = tourGuideService.generateFallbackResponse(
+            to: text,
+            location: location,
+            placemark: placemark,
+            nearbyPOIs: nearbyPOIs,
+            currentTour: currentTour
+        )
+
+        switch GuideRouter.selectBackend() {
+        case .claude:
             // Use real Claude API with full location context
             isUsingAI = true
             let context = tourGuideService.buildLocationContext(
@@ -57,16 +75,25 @@ final class ChatViewModel: ObservableObject {
                 conversationHistory: messages,
                 locationContext: context
             )
-        } else {
-            // Fall back to offline template responses
-            isUsingAI = false
-            response = tourGuideService.generateFallbackResponse(
-                to: text,
+        case .onDevice:
+            // Apple's on-device model — no key required. Fall back to canned
+            // text if generation fails.
+            isUsingAI = true
+            let context = tourGuideService.buildLocationContext(
                 location: location,
                 placemark: placemark,
                 nearbyPOIs: nearbyPOIs,
                 currentTour: currentTour
             )
+            response = await onDevice.ask(
+                question: text,
+                conversationHistory: messages,
+                locationContext: context
+            ) ?? canned
+        case .canned:
+            // Offline template responses.
+            isUsingAI = false
+            response = canned
         }
 
         lastMessageWasError = response.hasPrefix("I'm having trouble connecting")

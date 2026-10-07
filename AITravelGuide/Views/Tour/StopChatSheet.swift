@@ -14,6 +14,7 @@ struct StopChatSheet: View {
     @FocusState private var isInputFocused: Bool
 
     private let claudeAPI = ClaudeAPIService()
+    private let onDevice = OnDeviceGuideService()
     private let tourGuideService = TourGuideService()
 
     private var quickQuestions: [String] {
@@ -127,7 +128,17 @@ struct StopChatSheet: View {
             let response: String
             let stopLocation = CLLocation(latitude: stop.latitude, longitude: stop.longitude)
 
-            if APIKeyManager.shared.hasAPIKey {
+            let canned = tourGuideService.generateFallbackResponse(
+                to: text,
+                location: stopLocation,
+                placemark: nil,
+                nearbyPOIs: [],
+                currentTour: tour
+            )
+
+            let backend = GuideRouter.selectBackend()
+            switch backend {
+            case .claude, .onDevice:
                 let context = tourGuideService.buildLocationContext(
                     location: stopLocation,
                     placemark: nil,
@@ -136,20 +147,23 @@ struct StopChatSheet: View {
                 )
                 let factsBlock = stop.effectiveFacts.map { "\($0.title): \($0.content)" }.joined(separator: " | ")
                 let enrichedQuestion = "I'm in \(tour.locationName), currently at tour stop \"\(stop.name)\": \(stop.description). Facts about this stop: \(factsBlock) My question: \(text)"
-                response = await claudeAPI.ask(
-                    question: enrichedQuestion,
-                    conversationHistory: messages,
-                    locationContext: context,
-                    guidePersona: tour.guidePersona
-                )
-            } else {
-                response = tourGuideService.generateFallbackResponse(
-                    to: text,
-                    location: stopLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
+                if backend == .claude {
+                    response = await claudeAPI.ask(
+                        question: enrichedQuestion,
+                        conversationHistory: messages,
+                        locationContext: context,
+                        guidePersona: tour.guidePersona
+                    )
+                } else {
+                    response = await onDevice.ask(
+                        question: enrichedQuestion,
+                        conversationHistory: messages,
+                        locationContext: context,
+                        guidePersona: tour.guidePersona
+                    ) ?? canned
+                }
+            case .canned:
+                response = canned
             }
 
             messages.append(ChatMessage.assistantMessage(response))

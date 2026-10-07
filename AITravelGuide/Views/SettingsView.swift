@@ -28,11 +28,21 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    onDeviceStatusRow
+                } header: {
+                    Text("On-Device Intelligence")
+                } footer: {
+                    Text(OnDeviceGuideService.isAvailable
+                         ? "This iPhone can generate tours and chat using Apple's on-device model — free, private, and offline. Used automatically when no Claude key is set."
+                         : "Apple's on-device model isn't available on this device. Requires iPhone 15 Pro or newer on iOS 26+ with Apple Intelligence enabled. Add a Claude API key below for AI features.")
+                }
+
+                Section {
                     apiKeySection
                 } header: {
                     Text("Claude API Key")
                 } footer: {
-                    Text("Your API key is stored securely in the iOS Keychain and never leaves your device except to authenticate with the Anthropic API. Get a key at console.anthropic.com.")
+                    Text("Optional. When set, tours and chat use Claude for the richest results. Your key is stored securely in the iOS Keychain and never leaves your device except to authenticate with the Anthropic API. Get a key at console.anthropic.com.")
                 }
 
                 Section {
@@ -201,6 +211,20 @@ struct SettingsView: View {
     }
 
     // MARK: - API Key Section
+
+    private var onDeviceStatusRow: some View {
+        let available = OnDeviceGuideService.isAvailable
+        return HStack(spacing: 12) {
+            Image(systemName: available ? "checkmark.seal.fill" : "seal")
+                .foregroundStyle(available ? .green : .secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Apple On-Device AI")
+                Text(available ? "Available — no API key needed" : "Not available on this device")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
 
     @ViewBuilder
     private var apiKeySection: some View {

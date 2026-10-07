@@ -18,3 +18,6 @@ firebase-debug.*.log
 # Plans / session artifacts (live in ~/.claude/plans, not in the repo)
 plans/
 tasks/
+
+# Local archive snapshots
+*.zip

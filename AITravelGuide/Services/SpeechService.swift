@@ -385,7 +385,8 @@ final class SpeechService: NSObject, ObservableObject {
 
     /// Preload narration text for a stop (call while user reviews tour preview)
     func preloadStopNarration(_ stop: TourStop, tour: Tour?) async {
-        guard APIKeyManager.shared.hasAPIKey else { return }
+        let backend = GuideRouter.selectBackend()
+        guard backend != .canned else { return }
         guard cachedNarrations[stop.name] == nil else { return }
         guard preloadTasks[stop.name] == nil else { return }
 
@@ -393,12 +394,22 @@ final class SpeechService: NSObject, ObservableObject {
         let persona = tour?.guidePersona
 
         let task = Task<String?, Never> {
-            let claudeAPI = ClaudeAPIService()
-            return await claudeAPI.narrateStop(
-                stop: stop,
-                locationContext: context,
-                guidePersona: persona
-            )
+            switch backend {
+            case .claude:
+                return await ClaudeAPIService().narrateStop(
+                    stop: stop,
+                    locationContext: context,
+                    guidePersona: persona
+                )
+            case .onDevice:
+                return await OnDeviceGuideService().narrateStop(
+                    stop: stop,
+                    locationContext: context,
+                    guidePersona: persona
+                )
+            case .canned:
+                return nil
+            }
         }
         preloadTasks[stop.name] = task
 
@@ -437,7 +448,8 @@ final class SpeechService: NSObject, ObservableObject {
             }
         }
 
-        if APIKeyManager.shared.hasAPIKey {
+        switch GuideRouter.selectBackend() {
+        case .claude:
             let context = buildMinimalContext(stop: stop, tour: tour)
             let claudeAPI = ClaudeAPIService()
             let fallback = templateNarration(for: stop, persona: persona)
@@ -450,9 +462,25 @@ final class SpeechService: NSObject, ObservableObject {
                 await speakStreaming(stream, fallbackText: fallback)
                 return
             }
+        case .onDevice:
+            // On-device generation isn't streamed today — fetch the full
+            // narration (fast on-device), cache it, and speak it whole.
+            let context = buildMinimalContext(stop: stop, tour: tour)
+            if let narration = await OnDeviceGuideService().narrateStop(
+                stop: stop,
+                locationContext: context,
+                guidePersona: persona
+            ) {
+                cachedNarrations[stop.name] = narration
+                speak(narration)
+                return
+            }
+        case .canned:
+            break
         }
 
-        // No API key — fall back to the template narration.
+        // No AI backend available (or generation failed) — fall back to the
+        // template narration.
         speakStopDescription(stop, guidePersona: persona)
     }
 

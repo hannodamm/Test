@@ -30,6 +30,8 @@
 		A10000010000000000000021 /* MapSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021; };
 		A10000010000000000000022 /* APIKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000024; };
 		A10000010000000000000023 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000025; };
+		A10000010000000000000101 /* OnDeviceGuideService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000101; };
+		A10000010000000000000102 /* GuideRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000102; };
 		A10000010000000000000024 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000026; };
 		A10000010000000000000025 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000027; };
 		A10000010000000000000026 /* TourStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000028; };
@@ -73,6 +75,8 @@
 		A20000010000000000000023 /* AITravelGuide.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AITravelGuide.entitlements; sourceTree = "<group>"; };
 		A20000010000000000000024 /* APIKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyManager.swift; sourceTree = "<group>"; };
 		A20000010000000000000025 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
+		A20000010000000000000101 /* OnDeviceGuideService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceGuideService.swift; sourceTree = "<group>"; };
+		A20000010000000000000102 /* GuideRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideRouter.swift; sourceTree = "<group>"; };
 		A20000010000000000000026 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A20000010000000000000027 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
 		A20000010000000000000028 /* TourStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourStorageService.swift; sourceTree = "<group>"; };
@@ -144,6 +148,8 @@
 				A20000010000000000000021 /* MapSearchService.swift */,
 				A20000010000000000000024 /* APIKeyManager.swift */,
 				A20000010000000000000025 /* ClaudeAPIService.swift */,
+				A20000010000000000000101 /* OnDeviceGuideService.swift */,
+				A20000010000000000000102 /* GuideRouter.swift */,
 				A20000010000000000000037 /* ClaudeStreamParser.swift */,
 				A20000010000000000000038 /* GuidePreferences.swift */,
 				A20000010000000000000027 /* SpeechService.swift */,
@@ -309,6 +315,8 @@
 				A10000010000000000000021 /* MapSearchService.swift in Sources */,
 				A10000010000000000000022 /* APIKeyManager.swift in Sources */,
 				A10000010000000000000023 /* ClaudeAPIService.swift in Sources */,
+				A10000010000000000000101 /* OnDeviceGuideService.swift in Sources */,
+				A10000010000000000000102 /* GuideRouter.swift in Sources */,
 				A10000010000000000000024 /* SettingsView.swift in Sources */,
 				A10000010000000000000025 /* SpeechService.swift in Sources */,
 				A10000010000000000000026 /* TourStorageService.swift in Sources */,

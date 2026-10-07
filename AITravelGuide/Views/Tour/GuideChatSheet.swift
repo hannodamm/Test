@@ -13,6 +13,7 @@ struct GuideChatSheet: View {
     @FocusState private var isInputFocused: Bool
 
     private let claudeAPI = ClaudeAPIService()
+    private let onDevice = OnDeviceGuideService()
     private let tourGuideService = TourGuideService()
 
     private var tourLocationDescription: String {
@@ -140,7 +141,17 @@ struct GuideChatSheet: View {
             let response: String
             let tourLocation = CLLocation(latitude: tour.centerLatitude, longitude: tour.centerLongitude)
 
-            if APIKeyManager.shared.hasAPIKey {
+            let canned = tourGuideService.generateFallbackResponse(
+                to: text,
+                location: tourLocation,
+                placemark: nil,
+                nearbyPOIs: [],
+                currentTour: tour
+            )
+
+            let backend = GuideRouter.selectBackend()
+            switch backend {
+            case .claude, .onDevice:
                 let context = tourGuideService.buildLocationContext(
                     location: tourLocation,
                     placemark: nil,
@@ -148,20 +159,23 @@ struct GuideChatSheet: View {
                     currentTour: tour
                 )
                 let enrichedQuestion = "I'm on a tour in \(tour.locationName). \(text)"
-                response = await claudeAPI.ask(
-                    question: enrichedQuestion,
-                    conversationHistory: messages,
-                    locationContext: context,
-                    guidePersona: tour.guidePersona
-                )
-            } else {
-                response = tourGuideService.generateFallbackResponse(
-                    to: text,
-                    location: tourLocation,
-                    placemark: nil,
-                    nearbyPOIs: [],
-                    currentTour: tour
-                )
+                if backend == .claude {
+                    response = await claudeAPI.ask(
+                        question: enrichedQuestion,
+                        conversationHistory: messages,
+                        locationContext: context,
+                        guidePersona: tour.guidePersona
+                    )
+                } else {
+                    response = await onDevice.ask(
+                        question: enrichedQuestion,
+                        conversationHistory: messages,
+                        locationContext: context,
+                        guidePersona: tour.guidePersona
+                    ) ?? canned
+                }
+            case .canned:
+                response = canned
             }
 
             messages.append(ChatMessage.assistantMessage(response))
