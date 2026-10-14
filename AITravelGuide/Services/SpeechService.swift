@@ -13,6 +13,8 @@ final class SpeechService: NSObject, ObservableObject {
     private var audioPlayerDelegate: AudioPlayerDelegateHandler?
     private var cachedVoice: AVSpeechSynthesisVoice?
     private var isUsingOpenAI = false
+    private var isUsingNeural = false
+    private let neuralVoice = NeuralVoiceService.shared
     private var cachedNarrations: [String: String] = [:]
     private var preloadTasks: [String: Task<String?, Never>] = [:]
     private var currentTempFileURL: URL?
@@ -74,18 +76,7 @@ final class SpeechService: NSObject, ObservableObject {
     override init() {
         super.init()
         delegateHandler = SpeechDelegateHandler { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                if self.streamingUtterancesInFlight > 0 {
-                    self.streamingUtterancesInFlight -= 1
-                }
-                // Only clear speaking state once the stream has finished
-                // delivering chunks AND all queued utterances are done.
-                if !self.streamingIsReceiving && self.streamingUtterancesInFlight == 0 {
-                    self.isSpeaking = false
-                    self.isPaused = false
-                }
-            }
+            Task { @MainActor in self?.utteranceDidFinish() }
         }
         synthesizer.delegate = delegateHandler
 
@@ -98,6 +89,21 @@ final class SpeechService: NSObject, ObservableObject {
         }
 
         configureRemoteCommands()
+        neuralVoice.prewarm(languageID: GuidePreferences.currentLanguage.id)
+    }
+
+    /// Shared by AVSpeech and the neural voice when an utterance finishes.
+    private func utteranceDidFinish() {
+        if streamingUtterancesInFlight > 0 {
+            streamingUtterancesInFlight -= 1
+        }
+        // Only clear speaking state once the stream has finished
+        // delivering chunks AND all queued utterances are done.
+        if !streamingIsReceiving && streamingUtterancesInFlight == 0 {
+            isSpeaking = false
+            isPaused = false
+            isUsingNeural = false
+        }
     }
 
     // MARK: - Lock-screen / AirPods controls
@@ -186,6 +192,8 @@ final class SpeechService: NSObject, ObservableObject {
     func pause() {
         if isUsingOpenAI {
             audioPlayer?.pause()
+        } else if isUsingNeural {
+            neuralVoice.pause()
         } else {
             synthesizer.pauseSpeaking(at: .word)
         }
@@ -196,6 +204,8 @@ final class SpeechService: NSObject, ObservableObject {
     func resume() {
         if isUsingOpenAI {
             audioPlayer?.play()
+        } else if isUsingNeural {
+            neuralVoice.resume()
         } else {
             synthesizer.continueSpeaking()
         }
@@ -213,6 +223,8 @@ final class SpeechService: NSObject, ObservableObject {
         }
         audioPlayer?.stop()
         audioPlayer = nil
+        neuralVoice.stop()
+        isUsingNeural = false
         if let tempFile = currentTempFileURL {
             try? FileManager.default.removeItem(at: tempFile)
             currentTempFileURL = nil
@@ -285,10 +297,35 @@ final class SpeechService: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Neural voice (on-device Kokoro)
+
+    private var useNeuralVoice: Bool {
+        neuralVoice.supports(languageID: GuidePreferences.currentLanguage.id)
+    }
+
+    private var neuralSpeed: Float {
+        switch UserDefaults.standard.integer(forKey: "speechRateIndex") {
+        case 0: return 0.9
+        case 2: return 1.1
+        default: return 1.0
+        }
+    }
+
     // MARK: - AVSpeech (fallback)
 
     private func speakWithAVSpeech(_ text: String) {
         isUsingOpenAI = false
+
+        if useNeuralVoice {
+            isUsingNeural = true
+            isSpeaking = true
+            isPaused = false
+            neuralVoice.enqueue(text, languageID: GuidePreferences.currentLanguage.id,
+                                speed: neuralSpeed) { [weak self] in
+                self?.utteranceDidFinish()
+            }
+            return
+        }
 
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -372,6 +409,16 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     private func enqueueStreamedUtterance(_ text: String) {
+        if useNeuralVoice {
+            isUsingNeural = true
+            streamingUtterancesInFlight += 1
+            neuralVoice.enqueue(text, languageID: GuidePreferences.currentLanguage.id,
+                                speed: neuralSpeed) { [weak self] in
+                self?.utteranceDidFinish()
+            }
+            return
+        }
+
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = speechRateValue
         utterance.pitchMultiplier = 1.0
@@ -637,6 +684,7 @@ final class SpeechService: NSObject, ObservableObject {
     /// Reset cached voice when user changes language preferences
     func clearVoiceCache() {
         cachedVoice = nil
+        neuralVoice.prewarm(languageID: GuidePreferences.currentLanguage.id)
     }
 }
 

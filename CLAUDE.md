@@ -21,8 +21,8 @@ SwiftUI iOS app that delivers AI-generated walking tours. Location feeds MapKit 
 | LLM (cloud) | Anthropic Messages API, `claude-sonnet-4-6` (hardcoded in `ClaudeAPIService` and `TourGuideService.callClaudeAPI`) |
 | LLM (device) | Apple Foundation Models via `OnDeviceGuideService` (iPhone 15 Pro or newer, iOS 26+, Apple Intelligence enabled) |
 | Maps | MapKit + CoreLocation |
-| Speech | AVSpeechSynthesizer via `SpeechService` |
-| External deps | **None** — no SPM packages, no CocoaPods, no Firebase |
+| Speech | `SpeechService`: on-device Kokoro neural TTS via `NeuralVoiceService` (en/it/fr/es, when the model is installed; spike) → AVSpeechSynthesizer fallback (German always) |
+| External deps | SPM: `sherpa-onnx` 1.13.8 (on-device TTS, spike branch `spike/kokoro-voice`). No CocoaPods, no Firebase |
 
 ## Build, run, test
 

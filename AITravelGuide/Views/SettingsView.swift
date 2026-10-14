@@ -18,6 +18,7 @@ struct SettingsView: View {
 
     @AppStorage("voiceEnabled") private var voiceEnabled = true
     @AppStorage("speechRateIndex") private var speechRateIndex = 1 // 0=slow, 1=normal, 2=fast
+    @AppStorage(NeuralVoiceService.enabledKey) private var neuralVoiceEnabled = true
     @AppStorage(GuidePreferences.Key.language) private var preferredLanguage: String = "en"
     @AppStorage(GuidePreferences.Key.isKidFriendly) private var isKidFriendly: Bool = false
     @AppStorage(GuidePreferences.Key.tourDurationMinutes) private var tourDurationMinutes: Int = GuidePreferences.TourDuration.half.rawValue
@@ -119,6 +120,9 @@ struct SettingsView: View {
                         }
 
                     if voiceEnabled {
+                        Toggle("On-Device Neural Voice (Beta)", isOn: $neuralVoiceEnabled)
+                            .onChange(of: neuralVoiceEnabled) { _, _ in speechService.stop() }
+
                         Picker("Speech Speed", selection: $speechRateIndex) {
                             Text("Slow").tag(0)
                             Text("Normal").tag(1)
